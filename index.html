@@ -7,23 +7,17 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
-      --toolbar: #16213e;
-      --green: #00b894;
-      --red: #e17055;
-      --yellow: #fdcb6e;
-      --white: #f5f5f5;
-      --panel: #1e2a45;
+      --toolbar: #16213e; --green: #00b894; --red: #e17055;
+      --yellow: #fdcb6e; --white: #f5f5f5; --panel: #1e2a45;
     }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; touch-action: none; }
 
-    /* TOOLBAR */
     #toolbar {
       position: fixed; top: 0; left: 0; right: 0; height: 56px;
       background: var(--toolbar); display: flex; align-items: center;
       gap: 6px; padding: 0 12px; z-index: 100;
       box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      overflow-x: auto;
+      border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto;
     }
     #toolbar .sep { width: 1px; height: 30px; background: rgba(255,255,255,0.15); margin: 0 4px; flex-shrink: 0; }
     #toolbar button, #toolbar label {
@@ -44,122 +38,119 @@
     #roleBadge.teacher { background: rgba(0,184,148,0.2); color: var(--green); border: 1px solid var(--green); }
     #roleBadge.student { background: rgba(253,203,110,0.2); color: var(--yellow); border: 1px solid var(--yellow); }
 
-    /* LAYOUT */
-    #main {
-      position: fixed; top: 56px; left: 0; right: 0; bottom: 0;
-      display: flex;
-    }
+    #main { position: fixed; top: 56px; left: 0; right: 0; bottom: 0; display: flex; }
 
-    /* CANVAS */
     #canvas-wrapper { flex: 1; position: relative; overflow: hidden; }
     #whiteboard { width: 100%; height: 100%; background: #fff; display: block; cursor: crosshair; touch-action: none; }
 
     /* RIGHT PANEL */
     #rightPanel {
-      width: 260px; flex-shrink: 0;
-      background: var(--panel);
+      width: 260px; flex-shrink: 0; background: var(--panel);
       display: flex; flex-direction: column;
       border-right: 1px solid rgba(255,255,255,0.08);
+      transition: width 0.3s;
     }
+    #rightPanel.collapsed { width: 40px; }
 
-    /* STUDENTS LIST */
-    #studentsSection {
-      padding: 12px;
+    /* TOGGLE BUTTON */
+    #togglePanel {
+      display: flex; align-items: center; justify-content: center;
+      padding: 10px; cursor: pointer; background: rgba(255,255,255,0.05);
       border-bottom: 1px solid rgba(255,255,255,0.08);
+      color: white; font-size: 18px; flex-shrink: 0;
+      user-select: none;
     }
+    #togglePanel:hover { background: rgba(255,255,255,0.1); }
+
+    #panelContent { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #rightPanel.collapsed #panelContent { display: none; }
+
+    #studentsSection { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
     #studentsSection h3 { color: var(--green); font-size: 13px; margin-bottom: 8px; }
-    #studentsList { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto; }
+    #studentsList { display: flex; flex-direction: column; gap: 4px; max-height: 130px; overflow-y: auto; }
     .student-item { color: var(--white); font-size: 12px; padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 6px; }
 
-    /* CHAT */
     #chatSection { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 8px; overflow: hidden; }
     #chatSection h3 { color: var(--yellow); font-size: 13px; flex-shrink: 0; }
-    #chatMessages {
-      flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
-      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
-    }
-    .chat-msg { padding: 6px 10px; border-radius: 8px; font-size: 12px; max-width: 100%; word-break: break-word; }
+    #chatMessages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+    .chat-msg { padding: 6px 10px; border-radius: 8px; font-size: 12px; word-break: break-word; }
     .chat-msg.teacher { background: rgba(0,184,148,0.15); border-right: 3px solid var(--green); }
     .chat-msg.student { background: rgba(255,255,255,0.07); border-right: 3px solid var(--yellow); }
     .chat-msg .msg-name { font-size: 10px; opacity: 0.6; margin-bottom: 2px; }
     .chat-msg .msg-text { color: var(--white); }
-    #chatInput {
-      display: flex; gap: 6px; flex-shrink: 0;
-    }
-    #chatInput input {
-      flex: 1; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
-      background: rgba(255,255,255,0.07); color: white; font-size: 13px;
-      font-family: inherit; outline: none; direction: rtl;
-    }
-    #chatInput button { padding: 8px 12px; border-radius: 8px; border: none; background: var(--green); color: #000; cursor: pointer; font-size: 13px; flex-shrink: 0; }
+    #chatInput { display: flex; gap: 6px; flex-shrink: 0; }
+    #chatInput input { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.07); color: white; font-size: 13px; font-family: inherit; outline: none; direction: rtl; }
+    #chatInput button { padding: 8px 12px; border-radius: 8px; border: none; background: var(--green); color: #000; cursor: pointer; font-size: 13px; }
 
-    /* TEXT INPUT */
     #textInput {
-      position: fixed; display: none;
-      border: 2px dashed var(--green); border-radius: 4px;
-      background: rgba(255,255,255,0.97); padding: 4px 8px;
-      font-size: 20px; min-width: 160px; outline: none;
-      z-index: 200; color: #000; direction: rtl;
+      position: fixed; display: none; border: 2px dashed var(--green);
+      border-radius: 4px; background: rgba(255,255,255,0.97);
+      padding: 4px 8px; font-size: 20px; min-width: 160px;
+      outline: none; z-index: 200; color: #000; direction: rtl;
     }
 
-    /* MIC INDICATOR */
     #micIndicator {
       display: none; position: fixed; bottom: 20px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(225,112,85,0.92); color: white;
-      padding: 10px 24px; border-radius: 30px; font-size: 14px;
-      z-index: 300; backdrop-filter: blur(8px);
-      animation: pulse 1.5s infinite;
+      transform: translateX(-50%); background: rgba(225,112,85,0.92);
+      color: white; padding: 10px 24px; border-radius: 30px;
+      font-size: 14px; z-index: 300; animation: pulse 1.5s infinite;
     }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
-    /* REACTIONS */
-    #reactions {
-      position: fixed; bottom: 20px; left: 16px;
-      display: none; flex-direction: column; gap: 8px; z-index: 300;
-    }
-    #reactions button {
-      width: 48px; height: 48px; border-radius: 50%; border: none;
-      font-size: 22px; cursor: pointer;
-      background: rgba(30,30,60,0.75); backdrop-filter: blur(8px);
-      transition: transform 0.15s; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    }
+    #reactions { position: fixed; bottom: 20px; left: 16px; display: none; flex-direction: column; gap: 8px; z-index: 300; }
+    #reactions button { width: 48px; height: 48px; border-radius: 50%; border: none; font-size: 22px; cursor: pointer; background: rgba(30,30,60,0.75); backdrop-filter: blur(8px); transition: transform 0.15s; }
     #reactions button:active { transform: scale(0.85); }
 
-    /* TOAST */
-    #toast {
-      position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.82); color: white;
-      padding: 8px 20px; border-radius: 20px; font-size: 13px;
-      z-index: 400; opacity: 0; transition: opacity 0.3s;
-      pointer-events: none; white-space: nowrap;
-    }
+    #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.82); color: white; padding: 8px 20px; border-radius: 20px; font-size: 13px; z-index: 400; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
     #toast.show { opacity: 1; }
 
-    /* REACTION POPUP */
-    .reaction-popup {
-      position: fixed; font-size: 32px; z-index: 500;
-      pointer-events: none; animation: floatUp 2s forwards;
-    }
+    .reaction-popup { position: fixed; font-size: 32px; z-index: 500; pointer-events: none; animation: floatUp 2s forwards; }
     @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-120px) scale(1.5); } }
 
-    /* FILE NOTIFICATION */
-    #fileNotif {
-      display: none; position: fixed; bottom: 80px; left: 50%;
-      transform: translateX(-50%);
-      background: var(--panel); border: 1px solid var(--green);
-      color: white; padding: 12px 20px; border-radius: 12px;
-      z-index: 300; text-align: center; font-size: 13px;
-    }
+    #fileNotif { display: none; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--green); color: white; padding: 12px 20px; border-radius: 12px; z-index: 300; text-align: center; font-size: 13px; }
     #fileNotif a { color: var(--green); display: block; margin-top: 6px; }
+
+    /* NAME POPUP */
+    #namePopup {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; backdrop-filter: blur(4px);
+    }
+    #namePopup .box {
+      background: var(--panel); border-radius: 16px;
+      padding: 32px; display: flex; flex-direction: column;
+      gap: 16px; min-width: 300px; border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    #namePopup h2 { color: var(--white); font-size: 18px; text-align: center; }
+    #namePopup input {
+      padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.07); color: white; font-size: 16px;
+      font-family: inherit; outline: none; direction: rtl; text-align: center;
+    }
+    #namePopup button {
+      padding: 12px; border-radius: 8px; border: none;
+      background: var(--green); color: #000; font-size: 16px;
+      font-weight: bold; cursor: pointer; font-family: inherit;
+    }
 
     @media (max-width: 600px) {
       #rightPanel { width: 200px; }
+      #rightPanel.collapsed { width: 36px; }
       #toolbar button, #toolbar label { padding: 6px 8px; font-size: 11px; }
     }
   </style>
 </head>
 <body>
+
+<!-- NAME POPUP (للطالب فقط) -->
+<div id="namePopup" style="display:none">
+  <div class="box">
+    <h2>👋 مرحبا! اكتب اسمك</h2>
+    <input type="text" id="nameInput" placeholder="اسمك هنا..." dir="rtl" maxlength="30">
+    <button onclick="confirmName()">دخول ✅</button>
+  </div>
+</div>
 
 <!-- TOOLBAR -->
 <div id="toolbar">
@@ -185,50 +176,39 @@
 
 <!-- MAIN -->
 <div id="main">
-  <!-- CANVAS -->
   <div id="canvas-wrapper">
     <canvas id="whiteboard"></canvas>
   </div>
 
   <!-- RIGHT PANEL -->
   <div id="rightPanel">
-    <!-- قائمة التلاميذ -->
-    <div id="studentsSection">
-      <h3>👥 التلاميذ المتصلين</h3>
-      <div id="studentsList">
-        <span style="color:rgba(255,255,255,0.3);font-size:11px">لا يوجد تلاميذ بعد</span>
+    <div id="togglePanel" onclick="togglePanel()">◀</div>
+    <div id="panelContent">
+      <div id="studentsSection">
+        <h3>👥 التلاميذ المتصلين</h3>
+        <div id="studentsList"><span style="color:rgba(255,255,255,0.3);font-size:11px">لا يوجد تلاميذ بعد</span></div>
       </div>
-    </div>
-
-    <!-- شات -->
-    <div id="chatSection">
-      <h3>💬 الشات</h3>
-      <div id="chatMessages"></div>
-      <div id="chatInput">
-        <input type="text" id="chatBox" placeholder="اكتب رسالة..." dir="rtl" maxlength="200">
-        <button onclick="sendChat()">↩</button>
+      <div id="chatSection">
+        <h3>💬 الشات</h3>
+        <div id="chatMessages"></div>
+        <div id="chatInput">
+          <input type="text" id="chatBox" placeholder="اكتب رسالة..." dir="rtl" maxlength="200">
+          <button onclick="sendChat()">↩</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- TEXT INPUT -->
 <input type="text" id="textInput" placeholder="اكتب ثم Enter..." dir="rtl">
-
-<!-- MIC INDICATOR -->
 <div id="micIndicator">🎙️ الأستاذ يتكلم...</div>
-
-<!-- FILE NOTIFICATION -->
 <div id="fileNotif"></div>
-
-<!-- REACTIONS (للطالب) -->
 <div id="reactions">
   <button onclick="sendReaction('✋')">✋</button>
   <button onclick="sendReaction('👍')">👍</button>
   <button onclick="sendReaction('❓')">❓</button>
   <button onclick="sendReaction('👏')">👏</button>
 </div>
-
 <div id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
