@@ -9,9 +9,7 @@
     :root { --toolbar: #16213e; --green: #00b894; --red: #e17055; --yellow: #fdcb6e; --white: #f5f5f5; --panel: #1e2a45; --dark: #1a1a2e; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: var(--dark); font-family: 'Segoe UI', Tahoma, sans-serif; touch-action: none; }
 
-    /* TOOLBAR */
-    #toolbar { position: fixed; top: 0; left: 0; right: 0; height: 52px; background: var(--toolbar); display: flex; align-items: center; gap: 5px; padding: 0 10px; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; overflow-y: hidden; }
-    #toolbar::-webkit-scrollbar { height: 3px; } #toolbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); }
+    #toolbar { position: fixed; top: 0; left: 0; right: 0; height: 52px; background: var(--toolbar); display: flex; align-items: center; gap: 5px; padding: 0 10px; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; }
     .sep { width: 1px; height: 28px; background: rgba(255,255,255,0.15); margin: 0 3px; flex-shrink: 0; }
     #toolbar button, #toolbar label { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 7px; border: none; background: rgba(255,255,255,0.07); color: var(--white); cursor: pointer; font-size: 12px; font-family: inherit; transition: background 0.15s; white-space: nowrap; flex-shrink: 0; }
     #toolbar button:hover, #toolbar label:hover { background: rgba(255,255,255,0.15); }
@@ -25,100 +23,89 @@
     #roleBadge.teacher { background: rgba(0,184,148,0.2); color: var(--green); border: 1px solid var(--green); }
     #roleBadge.student { background: rgba(253,203,110,0.2); color: var(--yellow); border: 1px solid var(--yellow); }
 
-    /* MAIN */
     #main { position: fixed; top: 52px; left: 0; right: 0; bottom: 0; display: flex; }
 
-    /* CANVAS */
-    #canvas-wrapper { flex: 1; position: relative; overflow: hidden; }
+    #canvas-wrapper { flex: 1; position: relative; overflow: hidden; background: #fff; }
     #whiteboard { position: absolute; top: 0; left: 0; background: #fff; cursor: crosshair; touch-action: none; transform-origin: top left; }
 
-    /* ZOOM CONTROLS */
-    #zoomControls { position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 50; }
-    #zoomControls button { width: 36px; height: 36px; border-radius: 8px; border: none; background: rgba(30,42,69,0.9); color: white; font-size: 18px; cursor: pointer; backdrop-filter: blur(4px); }
+    #zoomControls { position: absolute; bottom: 14px; right: 14px; display: flex; flex-direction: column; gap: 5px; z-index: 50; }
+    #zoomControls button { width: 34px; height: 34px; border-radius: 8px; border: none; background: rgba(22,33,62,0.85); color: white; font-size: 18px; cursor: pointer; backdrop-filter: blur(4px); }
     #zoomControls button:hover { background: var(--green); color: #000; }
-    #zoomLevel { text-align: center; color: rgba(255,255,255,0.6); font-size: 10px; }
+    #zoomLevel { text-align: center; color: rgba(255,255,255,0.5); font-size: 10px; }
 
-    /* RIGHT PANEL */
+    /* PANEL */
     #rightPanel { width: 260px; flex-shrink: 0; background: var(--panel); display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,0.08); transition: width 0.25s; }
     #rightPanel.collapsed { width: 38px; }
-    #togglePanel { display: flex; align-items: center; justify-content: center; padding: 10px; cursor: pointer; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); font-size: 16px; flex-shrink: 0; user-select: none; }
-    #togglePanel:hover { background: rgba(255,255,255,0.08); color: white; }
+    #togglePanel { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; cursor: pointer; background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 13px; flex-shrink: 0; user-select: none; }
+    #togglePanel:hover { background: rgba(255,255,255,0.1); color: white; }
+    #rightPanel.collapsed #togglePanel { justify-content: center; }
     #panelContent { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     #rightPanel.collapsed #panelContent { display: none; }
 
-    /* STUDENTS */
     #studentsSection { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
     #studentsSection h3 { color: var(--green); font-size: 12px; margin-bottom: 6px; }
     #studentsList { display: flex; flex-direction: column; gap: 3px; max-height: 120px; overflow-y: auto; }
     .student-item { display: flex; align-items: center; gap: 4px; color: var(--white); font-size: 11px; padding: 4px 6px; background: rgba(255,255,255,0.05); border-radius: 6px; }
     .student-item span { flex: 1; }
-    .student-item button { padding: 2px 5px; border-radius: 4px; border: none; cursor: pointer; font-size: 10px; background: rgba(225,112,85,0.2); color: var(--red); }
-    .student-item button:hover { background: var(--red); color: white; }
-    .student-item.muted span { opacity: 0.5; text-decoration: line-through; }
+    .student-item button { padding: 2px 6px; border-radius: 4px; border: none; cursor: pointer; font-size: 11px; background: rgba(255,255,255,0.1); color: white; }
+    .student-item button:hover { background: var(--red); }
+    .student-item.muted span { opacity: 0.45; }
 
-    /* FILES LIST */
     #filesSection { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); display: none; }
     #filesSection h3 { color: #a29bfe; font-size: 12px; margin-bottom: 6px; }
     #filesList { display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
     .file-item { display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 6px; background: rgba(255,255,255,0.05); border-radius: 5px; }
-    .file-item a { flex: 1; color: #a29bfe; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+    .file-item a { flex: 1; color: #a29bfe; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .file-item button { padding: 2px 5px; border-radius: 4px; border: none; cursor: pointer; font-size: 10px; background: rgba(225,112,85,0.2); color: var(--red); }
+    .file-item button:hover { background: var(--red); color: white; }
 
-    /* CHAT */
     #chatSection { flex: 1; display: flex; flex-direction: column; padding: 10px; gap: 6px; overflow: hidden; }
     #chatHeader { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     #chatHeader h3 { color: var(--yellow); font-size: 12px; flex: 1; }
-    #lockChatBtn { padding: 3px 7px; border-radius: 5px; border: none; background: rgba(253,203,110,0.15); color: var(--yellow); cursor: pointer; font-size: 11px; }
+    #lockChatBtn { padding: 3px 7px; border-radius: 5px; border: none; background: rgba(253,203,110,0.15); color: var(--yellow); cursor: pointer; font-size: 11px; display: none; }
     #lockChatBtn.locked { background: rgba(225,112,85,0.2); color: var(--red); }
-    #chatMessages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; scrollbar-width: thin; }
-    .chat-msg { padding: 5px 8px; border-radius: 7px; font-size: 11px; word-break: break-word; position: relative; }
+    #chatMessages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; scrollbar-width: thin; }
+    .chat-msg { padding: 5px 8px; border-radius: 7px; font-size: 11px; word-break: break-word; }
     .chat-msg.teacher { background: rgba(0,184,148,0.12); border-right: 3px solid var(--green); }
     .chat-msg.student { background: rgba(255,255,255,0.06); border-right: 3px solid var(--yellow); }
     .chat-msg .msg-name { font-size: 9px; opacity: 0.55; margin-bottom: 2px; }
     .chat-msg .msg-text { color: var(--white); }
-    .chat-msg .del-btn { position: absolute; top: 4px; left: 4px; background: none; border: none; color: rgba(255,255,255,0.3); cursor: pointer; font-size: 10px; display: none; }
-    .chat-msg:hover .del-btn { display: block; }
+    .chat-msg.deletable { cursor: pointer; }
+    .chat-msg.deletable:hover { opacity: 0.7; }
     #chatInput { display: flex; gap: 5px; flex-shrink: 0; }
     #chatInput input { flex: 1; padding: 7px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.07); color: white; font-size: 12px; font-family: inherit; outline: none; direction: rtl; }
-    #chatInput input:disabled { opacity: 0.4; }
-    #chatInput button { padding: 7px 11px; border-radius: 7px; border: none; background: var(--green); color: #000; cursor: pointer; font-size: 12px; }
+    #chatInput input:disabled { opacity: 0.35; }
+    #chatInput button { padding: 7px 11px; border-radius: 7px; border: none; background: var(--green); color: #000; cursor: pointer; font-size: 13px; }
 
-    /* TEXT INPUT */
     #textInput { position: fixed; display: none; border: 2px dashed var(--green); border-radius: 4px; background: rgba(255,255,255,0.97); padding: 4px 8px; font-size: 20px; min-width: 150px; outline: none; z-index: 200; color: #000; direction: rtl; }
 
-    /* MIC */
     #micIndicator { display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(225,112,85,0.92); color: white; padding: 8px 20px; border-radius: 30px; font-size: 13px; z-index: 300; animation: pulse 1.5s infinite; }
     @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.6} }
 
-    /* REACTIONS */
     #reactions { position: fixed; bottom: 20px; left: 10px; display: none; flex-direction: column; gap: 6px; z-index: 300; }
-    #reactions button { width: 44px; height: 44px; border-radius: 50%; border: none; font-size: 20px; cursor: pointer; background: rgba(30,42,69,0.85); backdrop-filter: blur(6px); transition: transform 0.15s; }
+    #reactions button { width: 44px; height: 44px; border-radius: 50%; border: none; font-size: 20px; cursor: pointer; background: rgba(22,33,62,0.85); backdrop-filter: blur(6px); transition: transform 0.15s; }
     #reactions button:active { transform: scale(0.85); }
 
-    /* TOAST */
     #toast { position: fixed; top: 62px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 7px 18px; border-radius: 20px; font-size: 12px; z-index: 400; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
     #toast.show { opacity: 1; }
 
     .reaction-popup { position: fixed; font-size: 30px; z-index: 500; pointer-events: none; animation: floatUp 2s forwards; }
     @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-100px) scale(1.4)} }
 
-    /* FILE NOTIF */
     #fileNotif { display: none; position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--green); color: white; padding: 10px 18px; border-radius: 10px; z-index: 300; text-align: center; font-size: 12px; }
     #fileNotif a { color: var(--green); display: block; margin-top: 4px; }
 
-    /* NAME POPUP */
     #namePopup { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(6px); }
     #namePopup .box { background: var(--panel); border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 280px; border: 1px solid rgba(255,255,255,0.1); }
     #namePopup h2 { color: var(--white); font-size: 17px; text-align: center; }
     #namePopup input { padding: 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.07); color: white; font-size: 15px; font-family: inherit; outline: none; direction: rtl; text-align: center; }
     #namePopup button { padding: 11px; border-radius: 8px; border: none; background: var(--green); color: #000; font-size: 15px; font-weight: bold; cursor: pointer; }
 
-    /* KICKED */
     #kickedScreen { display: none; position: fixed; inset: 0; background: var(--dark); align-items: center; justify-content: center; z-index: 2000; flex-direction: column; gap: 16px; color: white; }
-    #kickedScreen h2 { font-size: 24px; color: var(--red); }
+    #kickedScreen h2 { font-size: 22px; color: var(--red); }
 
     @media (max-width: 600px) {
-      #rightPanel { width: 220px; }
+      #rightPanel { width: 210px; }
       #rightPanel.collapsed { width: 34px; }
       #toolbar button, #toolbar label { padding: 5px 7px; font-size: 11px; }
       #sizeSlider { width: 50px; }
@@ -127,13 +114,11 @@
 </head>
 <body>
 
-<!-- KICKED -->
 <div id="kickedScreen">
   <h2>🚫 تم طردك من السبورة</h2>
   <p style="opacity:0.6">تواصل مع الأستاذ</p>
 </div>
 
-<!-- NAME POPUP -->
 <div id="namePopup">
   <div class="box">
     <h2>👋 مرحبا! اكتب اسمك</h2>
@@ -142,7 +127,6 @@
   </div>
 </div>
 
-<!-- TOOLBAR -->
 <div id="toolbar">
   <span id="roleBadge">...</span>
   <span id="teacherTools" style="display:none;gap:5px;align-items:center">
@@ -164,7 +148,6 @@
   </span>
 </div>
 
-<!-- MAIN -->
 <div id="main">
   <div id="canvas-wrapper">
     <canvas id="whiteboard"></canvas>
@@ -172,31 +155,28 @@
       <button onclick="zoom(0.15)">+</button>
       <div id="zoomLevel">100%</div>
       <button onclick="zoom(-0.15)">−</button>
-      <button onclick="resetZoom()" style="font-size:12px">↺</button>
+      <button onclick="resetZoom()" style="font-size:11px">↺</button>
     </div>
   </div>
 
   <div id="rightPanel">
-    <div id="togglePanel" onclick="togglePanel()">◀</div>
+    <div id="togglePanel" onclick="togglePanel()">
+      <span id="toggleLabel">💬 الشات والتلاميذ</span>
+      <span id="toggleArrow">◀</span>
+    </div>
     <div id="panelContent">
-
-      <!-- التلاميذ -->
       <div id="studentsSection">
         <h3>👥 التلاميذ المتصلين</h3>
         <div id="studentsList"><span style="color:rgba(255,255,255,0.3);font-size:10px">لا يوجد تلاميذ</span></div>
       </div>
-
-      <!-- الملفات -->
       <div id="filesSection">
-        <h3>📎 الملفات المرفوعة</h3>
+        <h3>📎 الملفات</h3>
         <div id="filesList"></div>
       </div>
-
-      <!-- شات -->
       <div id="chatSection">
         <div id="chatHeader">
           <h3>💬 الشات</h3>
-          <button id="lockChatBtn" onclick="toggleChatLock()" style="display:none">🔓 مفتوح</button>
+          <button id="lockChatBtn" onclick="toggleChatLock()">🔓 مفتوح</button>
         </div>
         <div id="chatMessages"></div>
         <div id="chatInput">
