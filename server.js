@@ -12,7 +12,7 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 let boardState = { strokes: [], texts: [], images: [], files: [] };
 let chatMessages = [];
-let students = {}; // { socketId: { name, muted, banned } }
+let students = {};
 let chatLocked = false;
 
 setInterval(() => {
@@ -27,19 +27,17 @@ io.on('connection', (socket) => {
   socket.userName = name;
 
   if (role === 'student') {
-    students[socket.id] = { name, muted: chatLocked, banned: false };
+    students[socket.id] = { name, muted: chatLocked };
     io.emit('students_list', getStudentsList());
   }
 
   socket.emit('init', { boardState, chatMessages, students: getStudentsList(), chatLocked });
 
-  // رسم
   socket.on('draw_start', d => { if (socket.role === 'teacher') socket.broadcast.emit('draw_start', d); });
   socket.on('draw_move',  d => { if (socket.role === 'teacher') { boardState.strokes.push(d); socket.broadcast.emit('draw_move', d); } });
-  socket.on('draw_end',   ()=> { if (socket.role === 'teacher') socket.broadcast.emit('draw_end'); });
+  socket.on('draw_end',   () => { if (socket.role === 'teacher') socket.broadcast.emit('draw_end'); });
   socket.on('text', d => { if (socket.role === 'teacher') { boardState.texts.push(d); socket.broadcast.emit('text', d); } });
 
-  // ملفات
   socket.on('file', d => {
     if (socket.role !== 'teacher') return;
     if (d.type === 'image') boardState.images.push(d);
@@ -49,29 +47,26 @@ io.on('connection', (socket) => {
 
   socket.on('remove_file', d => {
     if (socket.role !== 'teacher') return;
-    boardState.files = boardState.files.filter(f => f.name !== d.name);
+    boardState.files  = boardState.files.filter(f => f.name !== d.name);
     boardState.images = boardState.images.filter(f => f.name !== d.name);
     io.emit('remove_file', d);
   });
 
-  // مسح
   socket.on('clear', () => {
     if (socket.role !== 'teacher') return;
     boardState = { strokes: [], texts: [], images: [], files: [] };
     socket.broadcast.emit('clear');
   });
 
-  // WebRTC
   socket.on('webrtc_offer',  d => socket.broadcast.emit('webrtc_offer',  d));
   socket.on('webrtc_answer', d => socket.broadcast.emit('webrtc_answer', d));
   socket.on('webrtc_ice',    d => socket.broadcast.emit('webrtc_ice',    d));
   socket.on('mic_status',    d => { if (socket.role === 'teacher') socket.broadcast.emit('mic_status', d); });
 
-  // شات
   socket.on('chat', d => {
     if (socket.role === 'student') {
       const s = students[socket.id];
-      if (!s || s.muted || s.banned || chatLocked) return;
+      if (!s || s.muted || chatLocked) return;
     }
     const msg = { name: socket.userName, role: socket.role, text: d.text, time: new Date().toLocaleTimeString('ar'), id: Date.now() };
     chatMessages.push(msg);
@@ -79,28 +74,24 @@ io.on('connection', (socket) => {
     io.emit('chat', msg);
   });
 
-  // حذف رسالة
   socket.on('delete_msg', d => {
     if (socket.role !== 'teacher') return;
     chatMessages = chatMessages.filter(m => m.id !== d.id);
     io.emit('delete_msg', d);
   });
 
-  // قفل/فتح الشات
   socket.on('chat_lock', d => {
     if (socket.role !== 'teacher') return;
     chatLocked = d.locked;
     io.emit('chat_lock', d);
   });
 
-  // طرد تلميذ
   socket.on('kick_student', d => {
     if (socket.role !== 'teacher') return;
     const target = io.sockets.sockets.get(d.id);
     if (target) { target.emit('kicked'); target.disconnect(); }
   });
 
-  // كتم تلميذ
   socket.on('mute_student', d => {
     if (socket.role !== 'teacher') return;
     if (students[d.id]) {
@@ -110,11 +101,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  // تفاعلات
   socket.on('student_react', d => {
     if (socket.role !== 'student') return;
     const s = students[socket.id];
-    if (!s || s.muted || s.banned) return;
+    if (!s || s.muted) return;
     io.emit('student_react', { ...d, name: socket.userName });
   });
 
