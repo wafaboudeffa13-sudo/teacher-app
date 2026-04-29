@@ -1,14 +1,13 @@
-// ===== الدور =====
 const params = new URLSearchParams(window.location.search);
 const ROLE = params.get('role') === 'teacher' ? 'teacher' : 'student';
 let USER_NAME = ROLE === 'teacher' ? '👨‍🏫 الأستاذ' : '';
 
-// ===== Name Popup للطالب =====
+// ===== Name Popup =====
 function showNamePopup() {
-  document.getElementById('namePopup').style.display = 'flex';
+  const p = document.getElementById('namePopup');
+  p.style.display = 'flex';
   setTimeout(() => document.getElementById('nameInput').focus(), 100);
 }
-
 function confirmName() {
   const val = document.getElementById('nameInput').value.trim();
   if (!val) { showToast('⚠️ اكتب اسمك!'); return; }
@@ -16,20 +15,16 @@ function confirmName() {
   document.getElementById('namePopup').style.display = 'none';
   initSocket();
 }
-
-document.getElementById('nameInput')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') confirmName();
-});
+document.getElementById('nameInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmName(); });
 
 // ===== Socket =====
 let socket;
 function initSocket() {
   socket = io({ query: { role: ROLE, name: USER_NAME } });
   setupSocketEvents();
-  showToast('🟢 جاري الاتصال...');
 }
 
-// ===== عناصر =====
+// ===== Elements =====
 const canvas       = document.getElementById('whiteboard');
 const ctx          = canvas.getContext('2d');
 const textInput    = document.getElementById('textInput');
@@ -37,29 +32,24 @@ const fileInput    = document.getElementById('fileInput');
 const toast        = document.getElementById('toast');
 const micBtn       = document.getElementById('micBtn');
 const micIndicator = document.getElementById('micIndicator');
-const chatMessages = document.getElementById('chatMessages');
+const chatMessagesEl = document.getElementById('chatMessages');
 const chatBox      = document.getElementById('chatBox');
 const studentsList = document.getElementById('studentsList');
 const fileNotif    = document.getElementById('fileNotif');
+const filesSection = document.getElementById('filesSection');
+const filesList    = document.getElementById('filesList');
+const lockChatBtn  = document.getElementById('lockChatBtn');
 
-// ===== حالة =====
+// ===== State =====
 let tool = 'pen', drawing = false, lastX = 0, lastY = 0;
 let penColor = '#000000', penSize = 3;
-let micOn = false, mediaStream = null, textPos = { x: 0, y: 0 };
-let panelOpen = true;
-
-// WebRTC
-let peerConnection = null, localStream = null;
+let micOn = false, localStream = null, textPos = { x: 0, y: 0 };
+let panelOpen = true, chatLocked = false, myMuted = false;
+let scale = 1, panX = 0, panY = 0;
+let isPanning = false, panStart = { x: 0, y: 0 };
+let peerConnection = null;
 const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
-// ===== Panel Toggle =====
-function togglePanel() {
-  panelOpen = !panelOpen;
-  const panel = document.getElementById('rightPanel');
-  const btn   = document.getElementById('togglePanel');
-  panel.classList.toggle('collapsed', !panelOpen);
-  btn.textContent = panelOpen ? '◀' : '▶';
-}
+const uploadedFiles = [];
 
 // ===== Role Setup =====
 function setupRole() {
@@ -68,16 +58,24 @@ function setupRole() {
     badge.textContent = '👨‍🏫 الأستاذ';
     badge.className = 'teacher';
     document.getElementById('teacherTools').style.display = 'flex';
+    if (lockChatBtn) lockChatBtn.style.display = 'block';
   } else {
     badge.textContent = `👨‍🎓 ${USER_NAME}`;
     badge.className = 'student';
     document.getElementById('studentTools').style.display = 'flex';
     document.getElementById('reactions').style.display = 'flex';
-    canvas.style.cursor = 'default';
+    canvas.style.cursor = 'grab';
   }
 }
 
-// ===== Canvas =====
+// ===== Panel Toggle =====
+function togglePanel() {
+  panelOpen = !panelOpen;
+  document.getElementById('rightPanel').classList.toggle('collapsed', !panelOpen);
+  document.getElementById('togglePanel').textContent = panelOpen ? '◀' : '▶';
+}
+
+// ===== Canvas Resize =====
 function resizeCanvas() {
   const wrapper = document.getElementById('canvas-wrapper');
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -91,6 +89,39 @@ function resetCtx() {
   ctx.strokeStyle = penColor; ctx.lineWidth = penSize;
 }
 window.addEventListener('resize', resizeCanvas);
+
+// ===== Zoom & Pan =====
+function zoom(delta) {
+  scale = Math.min(Math.max(0.3, scale + delta), 4);
+  applyTransform();
+}
+function resetZoom() { scale = 1; panX = 0; panY = 0; applyTransform(); }
+function applyTransform() {
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
+}
+
+// Touch pinch zoom
+let lastDist = 0;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  }
+}, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    zoom((dist - lastDist) * 0.005);
+    lastDist = dist;
+  }
+}, { passive: false });
+
+// Mouse wheel zoom
+document.getElementById('canvas-wrapper').addEventListener('wheel', e => {
+  e.preventDefault();
+  zoom(e.deltaY < 0 ? 0.1 : -0.1);
+}, { passive: false });
 
 // ===== Tools =====
 function setTool(t) {
@@ -110,12 +141,14 @@ function getPos(e) {
   const rect = canvas.getBoundingClientRect();
   const src = e.touches ? e.touches[0] : e;
   return {
-    x: (src.clientX - rect.left) * (canvas.width  / rect.width),
-    y: (src.clientY - rect.top)  * (canvas.height / rect.height)
+    x: (src.clientX - rect.left) / scale,
+    y: (src.clientY - rect.top)  / scale
   };
 }
+
 function startDraw(e) {
   if (ROLE !== 'teacher') return;
+  if (e.touches && e.touches.length > 1) return;
   e.preventDefault();
   if (tool === 'text') { showTextInput(getPos(e)); return; }
   drawing = true;
@@ -125,6 +158,7 @@ function startDraw(e) {
 }
 function moveDraw(e) {
   if (!drawing || ROLE !== 'teacher') return;
+  if (e.touches && e.touches.length > 1) return;
   e.preventDefault();
   const p = getPos(e);
   const data = { x1: lastX, y1: lastY, x2: p.x, y2: p.y, color: penColor, size: penSize, eraser: tool === 'eraser' };
@@ -154,8 +188,8 @@ function showTextInput(pos) {
   textPos = pos;
   const rect = canvas.getBoundingClientRect();
   textInput.style.display = 'block';
-  textInput.style.left = (rect.left + pos.x * (rect.width / canvas.width)) + 'px';
-  textInput.style.top  = (rect.top  + pos.y * (rect.height / canvas.height) - 18) + 'px';
+  textInput.style.left = (rect.left + pos.x * scale) + 'px';
+  textInput.style.top  = (rect.top  + pos.y * scale - 18) + 'px';
   textInput.value = '';
   setTimeout(() => textInput.focus(), 10);
 }
@@ -171,7 +205,7 @@ textInput.addEventListener('keydown', e => {
 });
 function drawText(d) {
   ctx.globalCompositeOperation = 'source-over';
-  ctx.font = `${Math.max(16, d.size * 5)}px 'Segoe UI', Tahoma, sans-serif`;
+  ctx.font = `${Math.max(14, d.size * 5)}px 'Segoe UI', Tahoma, sans-serif`;
   ctx.fillStyle = d.color || '#000';
   ctx.fillText(d.text, d.x, d.y);
 }
@@ -183,22 +217,46 @@ fileInput?.addEventListener('change', e => {
   const reader = new FileReader();
   reader.onload = ev => {
     const data = { name: file.name, type: file.type.startsWith('image/') ? 'image' : 'other', mime: file.type, data: ev.target.result };
-    if (data.type === 'image') { drawImg(data); showToast('✅ تم رفع الصورة'); }
-    else showToast(`✅ تم رفع: ${file.name}`);
+    if (data.type === 'image') { drawImg(data); }
+    addFileToList(data, true);
     socket.emit('file', data);
+    showToast(`✅ تم رفع: ${file.name}`);
   };
   reader.readAsDataURL(file);
   fileInput.value = '';
 });
+
 function drawImg(d) {
   const img = new Image();
   img.onload = () => ctx.drawImage(img, 60, 60, 380, 260);
   img.src = d.data;
 }
+
+function addFileToList(d, canDelete) {
+  filesSection.style.display = 'block';
+  const div = document.createElement('div');
+  div.className = 'file-item';
+  div.id = 'file-' + d.name.replace(/[^a-z0-9]/gi, '_');
+  div.innerHTML = `<a href="${d.data}" download="${d.name}" target="_blank">📎 ${d.name}</a>`;
+  if (canDelete) {
+    const btn = document.createElement('button');
+    btn.textContent = '✕';
+    btn.onclick = () => { socket.emit('remove_file', { name: d.name }); removeFileFromList(d.name); };
+    div.appendChild(btn);
+  }
+  filesList.appendChild(div);
+}
+
+function removeFileFromList(name) {
+  const el = document.getElementById('file-' + name.replace(/[^a-z0-9]/gi, '_'));
+  if (el) el.remove();
+  if (!filesList.children.length) filesSection.style.display = 'none';
+}
+
 function showFileNotif(d) {
   fileNotif.style.display = 'block';
   fileNotif.innerHTML = `📎 الأستاذ أرسل: <strong>${d.name}</strong><a href="${d.data}" download="${d.name}">⬇️ تحميل</a>`;
-  setTimeout(() => fileNotif.style.display = 'none', 10000);
+  setTimeout(() => fileNotif.style.display = 'none', 12000);
 }
 
 // ===== Clear =====
@@ -208,16 +266,16 @@ function clearBoard() {
   socket.emit('clear'); showToast('🗑️ تم مسح السبورة');
 }
 
-// ===== WebRTC =====
+// ===== Mic / WebRTC =====
 async function toggleMic() {
   if (ROLE !== 'teacher') return;
   if (!micOn) {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      micOn = true; micBtn.textContent = '🔴 إيقاف المايك'; micBtn.classList.add('on');
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micOn = true; micBtn.textContent = '🔴 إيقاف'; micBtn.classList.add('on');
       socket.emit('mic_status', { on: true }); showToast('🎙️ المايك شاغل');
       await startWebRTC();
-    } catch { showToast('❌ ما قدرش يفتح المايك'); }
+    } catch { showToast('❌ تعذر فتح المايك'); }
   } else {
     stopWebRTC(); micOn = false; micBtn.textContent = '🎙️ مايك'; micBtn.classList.remove('on');
     socket.emit('mic_status', { on: false }); showToast('🔇 المايك موقوف');
@@ -225,7 +283,7 @@ async function toggleMic() {
 }
 async function startWebRTC() {
   peerConnection = new RTCPeerConnection(RTC_CONFIG);
-  localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+  localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
   peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('webrtc_ice', e.candidate); };
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
@@ -238,9 +296,9 @@ function stopWebRTC() {
 async function handleOffer(offer) {
   peerConnection = new RTCPeerConnection(RTC_CONFIG);
   peerConnection.ontrack = e => {
-    const audio = document.createElement('audio');
-    audio.srcObject = e.streams[0]; audio.autoplay = true;
-    document.body.appendChild(audio);
+    let audio = document.getElementById('teacherAudio');
+    if (!audio) { audio = document.createElement('audio'); audio.id = 'teacherAudio'; audio.autoplay = true; document.body.appendChild(audio); }
+    audio.srcObject = e.streams[0];
   };
   peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('webrtc_ice', e.candidate); };
   await peerConnection.setRemoteDescription(offer);
@@ -251,30 +309,67 @@ async function handleOffer(offer) {
 
 // ===== Chat =====
 function sendChat() {
+  if (myMuted || chatLocked) { showToast('🔇 الشات موقوف'); return; }
   const text = chatBox.value.trim();
   if (!text) return;
   socket.emit('chat', { text }); chatBox.value = '';
 }
 chatBox.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
 function addChatMsg(msg) {
   const div = document.createElement('div');
   div.className = `chat-msg ${msg.role}`;
-  div.innerHTML = `<div class="msg-name">${msg.name} · ${msg.time}</div><div class="msg-text">${msg.text}</div>`;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
+  div.dataset.id = msg.id;
+  let delBtn = ROLE === 'teacher' ? `<button class="del-btn" onclick="deleteMsg(${msg.id})">✕</button>` : '';
+  div.innerHTML = `${delBtn}<div class="msg-name">${msg.name} · ${msg.time}</div><div class="msg-text">${msg.text}</div>`;
+  chatMessagesEl.appendChild(div);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
 
-// ===== Students List =====
+function deleteMsg(id) {
+  socket.emit('delete_msg', { id });
+  removeMsgEl(id);
+}
+function removeMsgEl(id) {
+  const el = chatMessagesEl.querySelector(`[data-id="${id}"]`);
+  if (el) el.remove();
+}
+
+// ===== Chat Lock =====
+function toggleChatLock() {
+  if (ROLE !== 'teacher') return;
+  chatLocked = !chatLocked;
+  socket.emit('chat_lock', { locked: chatLocked });
+  updateLockBtn();
+}
+function updateLockBtn() {
+  if (!lockChatBtn) return;
+  lockChatBtn.textContent = chatLocked ? '🔒 مقفول' : '🔓 مفتوح';
+  lockChatBtn.classList.toggle('locked', chatLocked);
+  chatBox.disabled = chatLocked && ROLE !== 'teacher';
+}
+
+// ===== Students =====
 function updateStudentsList(list) {
-  if (!list || list.length === 0) {
-    studentsList.innerHTML = '<span style="color:rgba(255,255,255,0.3);font-size:11px">لا يوجد تلاميذ بعد</span>';
+  if (!list || !list.length) {
+    studentsList.innerHTML = '<span style="color:rgba(255,255,255,0.3);font-size:10px">لا يوجد تلاميذ</span>';
     return;
   }
-  studentsList.innerHTML = list.map(name => `<div class="student-item">🟢 ${name}</div>`).join('');
+  studentsList.innerHTML = list.map(s => {
+    const muteLabel = s.muted ? 'فتح' : 'كتم';
+    const teacherBtns = ROLE === 'teacher' ? `
+      <button onclick="muteStudent('${s.id}', ${!s.muted})">${muteLabel}</button>
+      <button onclick="kickStudent('${s.id}')">طرد</button>` : '';
+    return `<div class="student-item ${s.muted ? 'muted' : ''}"><span>🟢 ${s.name}</span>${teacherBtns}</div>`;
+  }).join('');
 }
+
+function kickStudent(id) { socket.emit('kick_student', { id }); }
+function muteStudent(id, muted) { socket.emit('mute_student', { id, muted }); }
 
 // ===== Reactions =====
 function sendReaction(emoji) {
+  if (myMuted) return;
   socket.emit('student_react', { emoji });
   showFloatingReaction(emoji, window.innerWidth / 2, window.innerHeight - 100);
 }
@@ -303,38 +398,54 @@ function setupSocketEvents() {
     state.boardState?.strokes?.forEach(s => drawSeg(s));
     state.boardState?.texts?.forEach(t => drawText(t));
     state.boardState?.images?.forEach(i => drawImg(i));
+    state.boardState?.files?.forEach(f => { addFileToList(f, ROLE === 'teacher'); if (ROLE !== 'teacher') showFileNotif(f); });
     state.chatMessages?.forEach(m => addChatMsg(m));
     updateStudentsList(state.students);
+    chatLocked = state.chatLocked || false;
+    updateLockBtn();
   });
 
   socket.on('draw_start', d => { ctx.beginPath(); ctx.moveTo(d.x, d.y); });
   socket.on('draw_move',  d => drawSeg(d));
   socket.on('draw_end',   () => {});
   socket.on('text',       d => drawText(d));
+
   socket.on('file', d => {
-    if (d.type === 'image') { drawImg(d); showToast('📷 الأستاذ رفع صورة'); }
-    else showFileNotif(d);
+    if (d.type === 'image') drawImg(d);
+    addFileToList(d, ROLE === 'teacher');
+    if (ROLE !== 'teacher') showFileNotif(d);
+    showToast(`📎 ملف جديد: ${d.name}`);
   });
+
+  socket.on('remove_file', d => removeFileFromList(d.name));
+
   socket.on('clear', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); showToast('🗑️ السبورة تمسحت'); });
   socket.on('mic_status', d => { micIndicator.style.display = d.on ? 'block' : 'none'; if (d.on) showToast('🎙️ الأستاذ يتكلم'); });
-  socket.on('chat', msg => addChatMsg(msg));
-  socket.on('chat_clear', () => { chatMessages.innerHTML = ''; showToast('🔄 تم تجديد الشات'); });
+  socket.on('chat',       m => addChatMsg(m));
+  socket.on('chat_clear', () => { chatMessagesEl.innerHTML = ''; showToast('🔄 تم تجديد الشات'); });
+  socket.on('delete_msg', d => removeMsgEl(d.id));
+  socket.on('chat_lock',  d => { chatLocked = d.locked; updateLockBtn(); showToast(d.locked ? '🔒 الشات مقفول' : '🔓 الشات مفتوح'); });
   socket.on('students_list', list => updateStudentsList(list));
   socket.on('student_react', d => {
-    showFloatingReaction(d.emoji, Math.random() * window.innerWidth * 0.8, window.innerHeight - 100);
-    if (ROLE === 'teacher') showToast(`${d.name} أرسل: ${d.emoji}`);
+    showFloatingReaction(d.emoji, Math.random() * window.innerWidth * 0.7 + 50, window.innerHeight - 120);
+    if (ROLE === 'teacher') showToast(`${d.name}: ${d.emoji}`);
   });
-  socket.on('webrtc_offer',  async offer     => { if (ROLE === 'student') await handleOffer(offer); });
-  socket.on('webrtc_answer', async answer    => { if (peerConnection) await peerConnection.setRemoteDescription(answer); });
-  socket.on('webrtc_ice',    async candidate => { if (peerConnection) await peerConnection.addIceCandidate(candidate); });
+  socket.on('you_muted', d => {
+    myMuted = d.muted;
+    chatBox.disabled = d.muted;
+    showToast(d.muted ? '🔇 تم كتمك' : '🔊 تم فتح الكتم');
+  });
+  socket.on('kicked', () => {
+    document.getElementById('kickedScreen').style.display = 'flex';
+  });
+
+  socket.on('webrtc_offer',  async o => { if (ROLE === 'student') await handleOffer(o); });
+  socket.on('webrtc_answer', async a => { if (peerConnection) await peerConnection.setRemoteDescription(a); });
+  socket.on('webrtc_ice',    async c => { if (peerConnection) await peerConnection.addIceCandidate(c); });
 }
 
 // ===== Init =====
 setupRole();
 resizeCanvas();
-
-if (ROLE === 'student') {
-  showNamePopup();
-} else {
-  initSocket();
-}
+if (ROLE === 'student') { showNamePopup(); }
+else { initSocket(); }
