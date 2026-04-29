@@ -6,248 +6,227 @@
   <title>سبورة تعليمية</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
     :root {
-      --bg: #1a1a2e;
       --toolbar: #16213e;
-      --accent: #0f3460;
       --green: #00b894;
       --red: #e17055;
       --yellow: #fdcb6e;
       --white: #f5f5f5;
-      --shadow: 0 4px 20px rgba(0,0,0,0.4);
+      --panel: #1e2a45;
     }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: 'Segoe UI', Tahoma, sans-serif; touch-action: none; }
 
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: var(--bg);
-      font-family: 'Segoe UI', Tahoma, sans-serif;
-      touch-action: none;
-    }
-
+    /* TOOLBAR */
     #toolbar {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: 56px;
-      background: var(--toolbar);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 0 12px;
-      z-index: 100;
-      box-shadow: var(--shadow);
+      position: fixed; top: 0; left: 0; right: 0; height: 56px;
+      background: var(--toolbar); display: flex; align-items: center;
+      gap: 6px; padding: 0 12px; z-index: 100;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
       border-bottom: 1px solid rgba(255,255,255,0.08);
       overflow-x: auto;
     }
-
-    #toolbar .sep {
-      width: 1px; height: 30px;
-      background: rgba(255,255,255,0.15);
-      margin: 0 4px;
-      flex-shrink: 0;
-    }
-
+    #toolbar .sep { width: 1px; height: 30px; background: rgba(255,255,255,0.15); margin: 0 4px; flex-shrink: 0; }
     #toolbar button, #toolbar label {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      padding: 7px 12px;
-      border-radius: 8px;
-      border: none;
-      background: rgba(255,255,255,0.07);
-      color: var(--white);
-      cursor: pointer;
-      font-size: 13px;
-      font-family: inherit;
-      transition: all 0.2s;
-      white-space: nowrap;
-      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
+      padding: 7px 12px; border-radius: 8px; border: none;
+      background: rgba(255,255,255,0.07); color: var(--white);
+      cursor: pointer; font-size: 13px; font-family: inherit;
+      transition: all 0.2s; white-space: nowrap; flex-shrink: 0;
     }
-
     #toolbar button:hover, #toolbar label:hover { background: rgba(255,255,255,0.15); }
     #toolbar button.active { background: var(--green); color: #000; font-weight: bold; }
     #toolbar button.danger { background: rgba(225,112,85,0.25); color: var(--red); }
     #toolbar button.danger:hover { background: var(--red); color: white; }
     #toolbar button#micBtn.on { background: var(--red); color: white; }
-
-    #colorPicker {
-      width: 32px; height: 32px;
-      border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.3);
-      cursor: pointer;
-      padding: 0;
-      background: none;
-      flex-shrink: 0;
-    }
-
-    #sizeSlider {
-      width: 70px;
-      accent-color: var(--green);
-      flex-shrink: 0;
-    }
-
-    #roleBadge {
-      margin-right: auto;
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: bold;
-      letter-spacing: 0.5px;
-      flex-shrink: 0;
-    }
+    #colorPicker { width: 32px; height: 32px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); cursor: pointer; padding: 0; flex-shrink: 0; }
+    #sizeSlider { width: 70px; accent-color: var(--green); flex-shrink: 0; }
+    #roleBadge { margin-right: auto; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; flex-shrink: 0; }
     #roleBadge.teacher { background: rgba(0,184,148,0.2); color: var(--green); border: 1px solid var(--green); }
     #roleBadge.student { background: rgba(253,203,110,0.2); color: var(--yellow); border: 1px solid var(--yellow); }
 
-    #canvas-wrapper {
-      position: fixed;
-      top: 56px; left: 0; right: 0; bottom: 0;
+    /* LAYOUT */
+    #main {
+      position: fixed; top: 56px; left: 0; right: 0; bottom: 0;
+      display: flex;
     }
 
-    #whiteboard {
-      width: 100%;
-      height: 100%;
-      background: #fff;
-      display: block;
-      cursor: crosshair;
-      touch-action: none;
+    /* CANVAS */
+    #canvas-wrapper { flex: 1; position: relative; overflow: hidden; }
+    #whiteboard { width: 100%; height: 100%; background: #fff; display: block; cursor: crosshair; touch-action: none; }
+
+    /* RIGHT PANEL */
+    #rightPanel {
+      width: 260px; flex-shrink: 0;
+      background: var(--panel);
+      display: flex; flex-direction: column;
+      border-right: 1px solid rgba(255,255,255,0.08);
     }
 
+    /* STUDENTS LIST */
+    #studentsSection {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    #studentsSection h3 { color: var(--green); font-size: 13px; margin-bottom: 8px; }
+    #studentsList { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto; }
+    .student-item { color: var(--white); font-size: 12px; padding: 4px 8px; background: rgba(255,255,255,0.05); border-radius: 6px; }
+
+    /* CHAT */
+    #chatSection { flex: 1; display: flex; flex-direction: column; padding: 12px; gap: 8px; overflow: hidden; }
+    #chatSection h3 { color: var(--yellow); font-size: 13px; flex-shrink: 0; }
+    #chatMessages {
+      flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+    }
+    .chat-msg { padding: 6px 10px; border-radius: 8px; font-size: 12px; max-width: 100%; word-break: break-word; }
+    .chat-msg.teacher { background: rgba(0,184,148,0.15); border-right: 3px solid var(--green); }
+    .chat-msg.student { background: rgba(255,255,255,0.07); border-right: 3px solid var(--yellow); }
+    .chat-msg .msg-name { font-size: 10px; opacity: 0.6; margin-bottom: 2px; }
+    .chat-msg .msg-text { color: var(--white); }
+    #chatInput {
+      display: flex; gap: 6px; flex-shrink: 0;
+    }
+    #chatInput input {
+      flex: 1; padding: 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.07); color: white; font-size: 13px;
+      font-family: inherit; outline: none; direction: rtl;
+    }
+    #chatInput button { padding: 8px 12px; border-radius: 8px; border: none; background: var(--green); color: #000; cursor: pointer; font-size: 13px; flex-shrink: 0; }
+
+    /* TEXT INPUT */
     #textInput {
-      position: fixed;
-      display: none;
-      border: 2px dashed var(--green);
-      border-radius: 4px;
-      background: rgba(255,255,255,0.97);
-      padding: 4px 8px;
-      font-size: 20px;
-      font-family: 'Segoe UI', sans-serif;
-      min-width: 160px;
-      outline: none;
-      z-index: 200;
-      color: #000;
-      direction: rtl;
+      position: fixed; display: none;
+      border: 2px dashed var(--green); border-radius: 4px;
+      background: rgba(255,255,255,0.97); padding: 4px 8px;
+      font-size: 20px; min-width: 160px; outline: none;
+      z-index: 200; color: #000; direction: rtl;
     }
 
+    /* MIC INDICATOR */
     #micIndicator {
-      display: none;
-      position: fixed;
-      bottom: 20px;
-      left: 50%;
+      display: none; position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%);
-      background: rgba(225,112,85,0.92);
-      color: white;
-      padding: 10px 24px;
-      border-radius: 30px;
-      font-size: 14px;
-      z-index: 300;
-      backdrop-filter: blur(8px);
+      background: rgba(225,112,85,0.92); color: white;
+      padding: 10px 24px; border-radius: 30px; font-size: 14px;
+      z-index: 300; backdrop-filter: blur(8px);
       animation: pulse 1.5s infinite;
     }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
-    }
-
+    /* REACTIONS */
     #reactions {
-      position: fixed;
-      bottom: 20px;
-      right: 16px;
-      display: none;
-      flex-direction: column;
-      gap: 8px;
-      z-index: 300;
+      position: fixed; bottom: 20px; left: 16px;
+      display: none; flex-direction: column; gap: 8px; z-index: 300;
     }
-
     #reactions button {
-      width: 48px; height: 48px;
-      border-radius: 50%;
-      border: none;
-      font-size: 22px;
-      cursor: pointer;
-      background: rgba(30,30,60,0.75);
-      backdrop-filter: blur(8px);
-      transition: transform 0.15s;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      width: 48px; height: 48px; border-radius: 50%; border: none;
+      font-size: 22px; cursor: pointer;
+      background: rgba(30,30,60,0.75); backdrop-filter: blur(8px);
+      transition: transform 0.15s; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
     #reactions button:active { transform: scale(0.85); }
 
+    /* TOAST */
     #toast {
-      position: fixed;
-      top: 70px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.82);
-      color: white;
-      padding: 8px 20px;
-      border-radius: 20px;
-      font-size: 13px;
-      z-index: 400;
-      opacity: 0;
-      transition: opacity 0.3s;
-      pointer-events: none;
-      white-space: nowrap;
+      position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.82); color: white;
+      padding: 8px 20px; border-radius: 20px; font-size: 13px;
+      z-index: 400; opacity: 0; transition: opacity 0.3s;
+      pointer-events: none; white-space: nowrap;
     }
     #toast.show { opacity: 1; }
 
+    /* REACTION POPUP */
     .reaction-popup {
-      position: fixed;
-      font-size: 32px;
-      z-index: 500;
-      pointer-events: none;
-      animation: floatUp 2s forwards;
+      position: fixed; font-size: 32px; z-index: 500;
+      pointer-events: none; animation: floatUp 2s forwards;
     }
-    @keyframes floatUp {
-      0%   { opacity: 1; transform: translateY(0) scale(1); }
-      100% { opacity: 0; transform: translateY(-120px) scale(1.5); }
+    @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-120px) scale(1.5); } }
+
+    /* FILE NOTIFICATION */
+    #fileNotif {
+      display: none; position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel); border: 1px solid var(--green);
+      color: white; padding: 12px 20px; border-radius: 12px;
+      z-index: 300; text-align: center; font-size: 13px;
     }
+    #fileNotif a { color: var(--green); display: block; margin-top: 6px; }
 
     @media (max-width: 600px) {
-      #toolbar { gap: 3px; padding: 0 6px; }
+      #rightPanel { width: 200px; }
       #toolbar button, #toolbar label { padding: 6px 8px; font-size: 11px; }
-      #sizeSlider { width: 50px; }
     }
   </style>
 </head>
 <body>
 
+<!-- TOOLBAR -->
 <div id="toolbar">
   <span id="roleBadge">...</span>
-
-  <span id="teacherTools" style="display:none;gap:6px;align-items:center;flex-wrap:nowrap">
+  <span id="teacherTools" style="display:none;gap:6px;align-items:center">
     <button id="penBtn" class="active" onclick="setTool('pen')">🖌️ قلم</button>
     <button id="eraserBtn" onclick="setTool('eraser')">🧹 ممحاة</button>
     <button id="textBtn" onclick="setTool('text')">⌨️ نص</button>
     <span class="sep"></span>
-    <input type="color" id="colorPicker" value="#000000" title="لون القلم">
-    <input type="range" id="sizeSlider" min="1" max="30" value="3" title="حجم القلم">
+    <input type="color" id="colorPicker" value="#000000">
+    <input type="range" id="sizeSlider" min="1" max="30" value="3">
     <span class="sep"></span>
-    <label for="fileInput">📁 صورة</label>
-    <input type="file" id="fileInput" style="display:none" accept="image/*">
+    <label for="fileInput">📁 ملف</label>
+    <input type="file" id="fileInput" style="display:none" accept="image/*,application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt">
     <button id="micBtn" onclick="toggleMic()">🎙️ مايك</button>
     <span class="sep"></span>
     <button class="danger" onclick="clearBoard()">🗑️ مسح</button>
   </span>
-
   <span id="studentTools" style="display:none;gap:6px;align-items:center">
     <span style="color:rgba(255,255,255,0.45);font-size:12px">وضع المشاهدة</span>
   </span>
 </div>
 
-<div id="canvas-wrapper">
-  <canvas id="whiteboard"></canvas>
+<!-- MAIN -->
+<div id="main">
+  <!-- CANVAS -->
+  <div id="canvas-wrapper">
+    <canvas id="whiteboard"></canvas>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="rightPanel">
+    <!-- قائمة التلاميذ -->
+    <div id="studentsSection">
+      <h3>👥 التلاميذ المتصلين</h3>
+      <div id="studentsList">
+        <span style="color:rgba(255,255,255,0.3);font-size:11px">لا يوجد تلاميذ بعد</span>
+      </div>
+    </div>
+
+    <!-- شات -->
+    <div id="chatSection">
+      <h3>💬 الشات</h3>
+      <div id="chatMessages"></div>
+      <div id="chatInput">
+        <input type="text" id="chatBox" placeholder="اكتب رسالة..." dir="rtl" maxlength="200">
+        <button onclick="sendChat()">↩</button>
+      </div>
+    </div>
+  </div>
 </div>
 
+<!-- TEXT INPUT -->
 <input type="text" id="textInput" placeholder="اكتب ثم Enter..." dir="rtl">
+
+<!-- MIC INDICATOR -->
 <div id="micIndicator">🎙️ الأستاذ يتكلم...</div>
 
+<!-- FILE NOTIFICATION -->
+<div id="fileNotif"></div>
+
+<!-- REACTIONS (للطالب) -->
 <div id="reactions">
-  <button onclick="sendReaction('✋')" title="سؤال">✋</button>
-  <button onclick="sendReaction('👍')" title="فاهم">👍</button>
-  <button onclick="sendReaction('❓')" title="ما فهمتش">❓</button>
-  <button onclick="sendReaction('👏')" title="برافو">👏</button>
+  <button onclick="sendReaction('✋')">✋</button>
+  <button onclick="sendReaction('👍')">👍</button>
+  <button onclick="sendReaction('❓')">❓</button>
+  <button onclick="sendReaction('👏')">👏</button>
 </div>
 
 <div id="toast"></div>
