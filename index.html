@@ -9,7 +9,10 @@
     :root { --toolbar: #16213e; --green: #00b894; --red: #e17055; --yellow: #fdcb6e; --white: #f5f5f5; --panel: #1e2a45; --dark: #1a1a2e; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: var(--dark); font-family: 'Segoe UI', Tahoma, sans-serif; touch-action: none; }
 
-    #toolbar { position: fixed; top: 0; left: 0; right: 0; height: 52px; background: var(--toolbar); display: flex; align-items: center; gap: 5px; padding: 0 10px; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; }
+    /* TOOLBAR */
+    #toolbar { position: fixed; top: 0; left: 0; right: 0; height: 52px; background: var(--toolbar); display: flex; align-items: center; gap: 5px; padding: 0 10px; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.4); border-bottom: 1px solid rgba(255,255,255,0.08); overflow-x: auto; transition: height 0.25s, opacity 0.25s; }
+    #toolbar.hidden { height: 0; opacity: 0; pointer-events: none; overflow: hidden; }
+    #toolbarToggle { position: fixed; top: 0; left: 0; width: 38px; height: 38px; background: var(--toolbar); border: none; color: white; font-size: 18px; cursor: pointer; z-index: 101; border-radius: 0 0 10px 0; display: none; align-items: center; justify-content: center; }
     .sep { width: 1px; height: 28px; background: rgba(255,255,255,0.15); margin: 0 3px; flex-shrink: 0; }
     #toolbar button, #toolbar label { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 7px; border: none; background: rgba(255,255,255,0.07); color: var(--white); cursor: pointer; font-size: 12px; font-family: inherit; transition: background 0.15s; white-space: nowrap; flex-shrink: 0; }
     #toolbar button:hover, #toolbar label:hover { background: rgba(255,255,255,0.15); }
@@ -23,13 +26,16 @@
     #roleBadge.teacher { background: rgba(0,184,148,0.2); color: var(--green); border: 1px solid var(--green); }
     #roleBadge.student { background: rgba(253,203,110,0.2); color: var(--yellow); border: 1px solid var(--yellow); }
 
-    #main { position: fixed; top: 52px; left: 0; right: 0; bottom: 0; display: flex; }
+    #main { position: fixed; top: 52px; left: 0; right: 0; bottom: 0; display: flex; transition: top 0.25s; }
+    #main.toolbar-hidden { top: 0; }
 
+    /* CANVAS */
     #canvas-wrapper { flex: 1; position: relative; overflow: hidden; background: #fff; }
-    #whiteboard { position: absolute; top: 0; left: 0; background: #fff; cursor: crosshair; touch-action: none; transform-origin: top left; }
+    #whiteboard { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: block; cursor: crosshair; touch-action: none; }
 
+    /* ZOOM */
     #zoomControls { position: absolute; bottom: 14px; right: 14px; display: flex; flex-direction: column; gap: 5px; z-index: 50; }
-    #zoomControls button { width: 34px; height: 34px; border-radius: 8px; border: none; background: rgba(22,33,62,0.85); color: white; font-size: 18px; cursor: pointer; backdrop-filter: blur(4px); }
+    #zoomControls button { width: 34px; height: 34px; border-radius: 8px; border: none; background: rgba(22,33,62,0.85); color: white; font-size: 18px; cursor: pointer; }
     #zoomControls button:hover { background: var(--green); color: #000; }
     #zoomLevel { text-align: center; color: rgba(255,255,255,0.5); font-size: 10px; }
 
@@ -44,20 +50,29 @@
 
     #studentsSection { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); }
     #studentsSection h3 { color: var(--green); font-size: 12px; margin-bottom: 6px; }
-    #studentsList { display: flex; flex-direction: column; gap: 3px; max-height: 120px; overflow-y: auto; }
+    #studentsList { display: flex; flex-direction: column; gap: 3px; max-height: 110px; overflow-y: auto; }
     .student-item { display: flex; align-items: center; gap: 4px; color: var(--white); font-size: 11px; padding: 4px 6px; background: rgba(255,255,255,0.05); border-radius: 6px; }
     .student-item span { flex: 1; }
     .student-item button { padding: 2px 6px; border-radius: 4px; border: none; cursor: pointer; font-size: 11px; background: rgba(255,255,255,0.1); color: white; }
     .student-item button:hover { background: var(--red); }
     .student-item.muted span { opacity: 0.45; }
 
+    /* PENDING */
+    #pendingSection { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); display: none; }
+    #pendingSection h3 { color: var(--yellow); font-size: 12px; margin-bottom: 6px; }
+    #pendingList { display: flex; flex-direction: column; gap: 4px; }
+    .pending-item { display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 4px 6px; background: rgba(253,203,110,0.08); border-radius: 6px; color: white; }
+    .pending-item span { flex: 1; }
+    .pending-item button { padding: 2px 7px; border-radius: 4px; border: none; cursor: pointer; font-size: 11px; font-weight: bold; }
+    .pending-item .approve { background: var(--green); color: #000; }
+    .pending-item .reject  { background: rgba(225,112,85,0.3); color: var(--red); }
+
     #filesSection { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); display: none; }
     #filesSection h3 { color: #a29bfe; font-size: 12px; margin-bottom: 6px; }
     #filesList { display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
     .file-item { display: flex; align-items: center; gap: 4px; font-size: 11px; padding: 3px 6px; background: rgba(255,255,255,0.05); border-radius: 5px; }
     .file-item a { flex: 1; color: #a29bfe; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-item button { padding: 2px 5px; border-radius: 4px; border: none; cursor: pointer; font-size: 10px; background: rgba(225,112,85,0.2); color: var(--red); }
-    .file-item button:hover { background: var(--red); color: white; }
+    .file-item .del-btn { padding: 2px 5px; border-radius: 4px; border: none; cursor: pointer; font-size: 10px; background: rgba(225,112,85,0.2); color: var(--red); }
 
     #chatSection { flex: 1; display: flex; flex-direction: column; padding: 10px; gap: 6px; overflow: hidden; }
     #chatHeader { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
@@ -71,7 +86,7 @@
     .chat-msg .msg-name { font-size: 9px; opacity: 0.55; margin-bottom: 2px; }
     .chat-msg .msg-text { color: var(--white); }
     .chat-msg.deletable { cursor: pointer; }
-    .chat-msg.deletable:hover { opacity: 0.7; }
+    .chat-msg.deletable:hover { opacity: 0.65; }
     #chatInput { display: flex; gap: 5px; flex-shrink: 0; }
     #chatInput input { flex: 1; padding: 7px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.07); color: white; font-size: 12px; font-family: inherit; outline: none; direction: rtl; }
     #chatInput input:disabled { opacity: 0.35; }
@@ -90,43 +105,68 @@
     #toast.show { opacity: 1; }
 
     .reaction-popup { position: fixed; font-size: 30px; z-index: 500; pointer-events: none; animation: floatUp 2s forwards; }
-    @keyframes floatUp { 0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-100px) scale(1.4)} }
+    @keyframes floatUp { 0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-100px) scale(1.4)} }
 
-    #fileNotif { display: none; position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--green); color: white; padding: 10px 18px; border-radius: 10px; z-index: 300; text-align: center; font-size: 12px; }
-    #fileNotif a { color: var(--green); display: block; margin-top: 4px; }
+    /* FILE DOWNLOAD POPUP للتلميذ */
+    #filePopup { display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--green); color: white; padding: 14px 20px; border-radius: 12px; z-index: 300; text-align: center; font-size: 13px; min-width: 240px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    #filePopup .dl-btn { display: inline-block; margin-top: 10px; padding: 8px 20px; background: var(--green); color: #000; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; }
+    #filePopup .close-btn { position: absolute; top: 6px; left: 8px; background: none; border: none; color: rgba(255,255,255,0.4); cursor: pointer; font-size: 14px; }
+
+    /* WAITING / REJECTED screens */
+    #waitingScreen, #rejectedScreen { display: none; position: fixed; inset: 0; background: var(--dark); align-items: center; justify-content: center; z-index: 2000; flex-direction: column; gap: 16px; color: white; text-align: center; padding: 20px; }
+    #waitingScreen h2 { color: var(--yellow); font-size: 20px; }
+    #rejectedScreen h2 { color: var(--red); font-size: 20px; }
+    .spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: var(--yellow); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #kickedScreen { display: none; position: fixed; inset: 0; background: var(--dark); align-items: center; justify-content: center; z-index: 2000; flex-direction: column; gap: 16px; color: white; }
+    #kickedScreen h2 { color: var(--red); font-size: 20px; }
 
     #namePopup { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(6px); }
-    #namePopup .box { background: var(--panel); border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 280px; border: 1px solid rgba(255,255,255,0.1); }
+    #namePopup .box { background: var(--panel); border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 14px; min-width: 280px; max-width: 90vw; border: 1px solid rgba(255,255,255,0.1); }
     #namePopup h2 { color: var(--white); font-size: 17px; text-align: center; }
     #namePopup input { padding: 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.07); color: white; font-size: 15px; font-family: inherit; outline: none; direction: rtl; text-align: center; }
     #namePopup button { padding: 11px; border-radius: 8px; border: none; background: var(--green); color: #000; font-size: 15px; font-weight: bold; cursor: pointer; }
 
-    #kickedScreen { display: none; position: fixed; inset: 0; background: var(--dark); align-items: center; justify-content: center; z-index: 2000; flex-direction: column; gap: 16px; color: white; }
-    #kickedScreen h2 { font-size: 22px; color: var(--red); }
-
     @media (max-width: 600px) {
-      #rightPanel { width: 210px; }
-      #rightPanel.collapsed { width: 34px; }
+      #rightPanel { width: 200px; }
+      #rightPanel.collapsed { width: 32px; }
       #toolbar button, #toolbar label { padding: 5px 7px; font-size: 11px; }
       #sizeSlider { width: 50px; }
+      #toolbarToggle { display: flex; }
     }
   </style>
 </head>
 <body>
 
+<!-- شاشات الانتظار -->
+<div id="waitingScreen">
+  <div class="spinner"></div>
+  <h2>⏳ انتظر موافقة الأستاذ...</h2>
+  <p style="opacity:0.5;font-size:13px">سيتم السماح لك بالدخول قريباً</p>
+</div>
+<div id="rejectedScreen">
+  <h2>❌ لم يتم قبولك</h2>
+  <p style="opacity:0.5;font-size:13px">تواصل مع الأستاذ</p>
+</div>
 <div id="kickedScreen">
   <h2>🚫 تم طردك من السبورة</h2>
-  <p style="opacity:0.6">تواصل مع الأستاذ</p>
+  <p style="opacity:0.5;font-size:13px">تواصل مع الأستاذ</p>
 </div>
 
+<!-- اسم التلميذ -->
 <div id="namePopup">
   <div class="box">
     <h2>👋 مرحبا! اكتب اسمك</h2>
     <input type="text" id="nameInput" placeholder="اسمك هنا..." dir="rtl" maxlength="30">
-    <button onclick="confirmName()">دخول ✅</button>
+    <button onclick="confirmName()">طلب الدخول ✅</button>
   </div>
 </div>
 
+<!-- زر إخفاء شريط الأدوات (موبايل) -->
+<button id="toolbarToggle" onclick="toggleToolbar()">☰</button>
+
+<!-- TOOLBAR -->
 <div id="toolbar">
   <span id="roleBadge">...</span>
   <span id="teacherTools" style="display:none;gap:5px;align-items:center">
@@ -142,12 +182,14 @@
     <button id="micBtn" onclick="toggleMic()">🎙️ مايك</button>
     <span class="sep"></span>
     <button class="danger" onclick="clearBoard()">🗑️ مسح</button>
+    <button onclick="toggleToolbar()" style="background:rgba(255,255,255,0.05)">✕</button>
   </span>
   <span id="studentTools" style="display:none;gap:5px;align-items:center">
     <span style="color:rgba(255,255,255,0.4);font-size:11px">وضع المشاهدة</span>
   </span>
 </div>
 
+<!-- MAIN -->
 <div id="main">
   <div id="canvas-wrapper">
     <canvas id="whiteboard"></canvas>
@@ -165,14 +207,26 @@
       <span id="toggleArrow">◀</span>
     </div>
     <div id="panelContent">
+
+      <!-- انتظار موافقة (للأستاذ) -->
+      <div id="pendingSection">
+        <h3>🔔 ينتظرون الدخول</h3>
+        <div id="pendingList"></div>
+      </div>
+
+      <!-- التلاميذ -->
       <div id="studentsSection">
         <h3>👥 التلاميذ المتصلين</h3>
         <div id="studentsList"><span style="color:rgba(255,255,255,0.3);font-size:10px">لا يوجد تلاميذ</span></div>
       </div>
+
+      <!-- الملفات -->
       <div id="filesSection">
         <h3>📎 الملفات</h3>
         <div id="filesList"></div>
       </div>
+
+      <!-- شات -->
       <div id="chatSection">
         <div id="chatHeader">
           <h3>💬 الشات</h3>
@@ -188,9 +242,14 @@
   </div>
 </div>
 
+<!-- FILE POPUP للتلميذ -->
+<div id="filePopup">
+  <button class="close-btn" onclick="document.getElementById('filePopup').style.display='none'">✕</button>
+  <div id="filePopupContent"></div>
+</div>
+
 <input type="text" id="textInput" placeholder="اكتب ثم Enter..." dir="rtl">
 <div id="micIndicator">🎙️ الأستاذ يتكلم...</div>
-<div id="fileNotif"></div>
 <div id="reactions">
   <button onclick="sendReaction('✋')">✋</button>
   <button onclick="sendReaction('👍')">👍</button>
