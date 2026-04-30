@@ -14,6 +14,7 @@ let boardState = { strokes: [], texts: [], images: [], files: [] };
 let chatMessages = [];
 let students = {};
 let chatLocked = false;
+let pendingStudents = {}; // طلاميذ ينتظرون الموافقة
 
 setInterval(() => {
   chatMessages = [];
@@ -27,16 +28,46 @@ io.on('connection', (socket) => {
   socket.userName = name;
 
   if (role === 'student') {
-    students[socket.id] = { name, muted: chatLocked };
-    io.emit('students_list', getStudentsList());
+    // ينتظر موافقة الأستاذ
+    pendingStudents[socket.id] = { name, socket };
+    io.emit('student_pending', { id: socket.id, name });
+    socket.emit('waiting_approval');
+  } else {
+    // الأستاذ يدخل مباشرة
+    socket.emit('init', { boardState, chatMessages, students: getStudentsList(), chatLocked });
   }
 
-  socket.emit('init', { boardState, chatMessages, students: getStudentsList(), chatLocked });
+  // الأستاذ يوافق أو يرفض
+  socket.on('approve_student', d => {
+    if (socket.role !== 'teacher') return;
+    const pending = pendingStudents[d.id];
+    if (!pending) return;
+    delete pendingStudents[d.id];
+    if (d.approved) {
+      students[d.id] = { name: pending.name, muted: chatLocked };
+      pending.socket.emit('approved');
+      pending.socket.emit('init', { boardState, chatMessages, students: getStudentsList(), chatLocked });
+      io.emit('students_list', getStudentsList());
+    } else {
+      pending.socket.emit('rejected');
+      pending.socket.disconnect();
+    }
+  });
 
   socket.on('draw_start', d => { if (socket.role === 'teacher') socket.broadcast.emit('draw_start', d); });
-  socket.on('draw_move',  d => { if (socket.role === 'teacher') { boardState.strokes.push(d); socket.broadcast.emit('draw_move', d); } });
-  socket.on('draw_end',   () => { if (socket.role === 'teacher') socket.broadcast.emit('draw_end'); });
-  socket.on('text', d => { if (socket.role === 'teacher') { boardState.texts.push(d); socket.broadcast.emit('text', d); } });
+  socket.on('draw_move',  d => {
+    if (socket.role === 'teacher') {
+      boardState.strokes.push(d);
+      socket.broadcast.emit('draw_move', d);
+    }
+  });
+  socket.on('draw_end', () => { if (socket.role === 'teacher') socket.broadcast.emit('draw_end'); });
+  socket.on('text', d => {
+    if (socket.role === 'teacher') {
+      boardState.texts.push(d);
+      socket.broadcast.emit('text', d);
+    }
+  });
 
   socket.on('file', d => {
     if (socket.role !== 'teacher') return;
@@ -109,6 +140,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    delete pendingStudents[socket.id];
     if (role === 'student') {
       delete students[socket.id];
       io.emit('students_list', getStudentsList());
