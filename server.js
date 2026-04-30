@@ -84,7 +84,13 @@ io.on('connection', (socket) => {
       const s = students[socket.id];
       if (!s || s.muted || chatLocked) return;
     }
-    const msg = { name: socket.userName, role: socket.role, text: d.text, time: new Date().toLocaleTimeString('ar'), id: Date.now() };
+    const msg = {
+      name: socket.userName,
+      role: socket.role,
+      text: d.text,
+      time: new Date().toLocaleTimeString('ar'),
+      id: Date.now()
+    };
     chatMessages.push(msg);
     if (chatMessages.length > 100) chatMessages.shift();
     io.emit('chat', msg);
