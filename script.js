@@ -51,7 +51,28 @@ let penColor = '#000000', penSize = 3;
 let micOn = false, localStream = null, textPos = { x: 0, y: 0 };
 let panelOpen = true, chatLocked = false, myMuted = false;
 let scale = 1, peerConnection = null;
-const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ]
+};
 
 // ===== Role =====
 function setupRole() {
@@ -84,16 +105,11 @@ function resizeCanvas() {
   const wrapper = document.getElementById('canvas-wrapper');
   let imgData = null;
   try { imgData = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch(e) {}
-
-  // نرجع الـ transform لـ default باش يحسب الحجم صح
   canvas.style.transform = '';
   canvas.width  = wrapper.clientWidth;
   canvas.height = wrapper.clientHeight;
-
   if (imgData) ctx.putImageData(imgData, 0, 0);
   resetCtx();
-
-  // نرجع الـ scale
   if (scale !== 1) {
     canvas.style.transformOrigin = '0 0';
     canvas.style.transform = `scale(${scale})`;
@@ -113,7 +129,6 @@ function zoom(delta) {
   canvas.style.transform = `scale(${scale})`;
   document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
 }
-
 function resetZoom() {
   scale = 1;
   canvas.style.transform = '';
@@ -160,7 +175,6 @@ function getPos(e) {
     y: (src.clientY - rect.top)  / scale
   };
 }
-
 function startDraw(e) {
   if (ROLE !== 'teacher') return;
   if (e.touches && e.touches.length > 1) return;
@@ -170,7 +184,6 @@ function startDraw(e) {
   const p = getPos(e); lastX = p.x; lastY = p.y;
   socket.emit('draw_start', { x: p.x, y: p.y });
 }
-
 function moveDraw(e) {
   if (!drawing || ROLE !== 'teacher') return;
   if (e.touches && e.touches.length > 1) return;
@@ -180,7 +193,6 @@ function moveDraw(e) {
   drawSeg(data); socket.emit('draw_move', data);
   lastX = p.x; lastY = p.y;
 }
-
 function endDraw() { if (!drawing) return; drawing = false; socket.emit('draw_end'); }
 
 function drawSeg(d) {
