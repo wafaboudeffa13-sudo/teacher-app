@@ -14,7 +14,7 @@ let boardState = { strokes: [], texts: [], images: [], files: [] };
 let chatMessages = [];
 let students = {};
 let chatLocked = false;
-let pendingStudents = {};
+let pendingStudents = {}; // طلاميذ ينتظرون الموافقة
 
 setInterval(() => {
   chatMessages = [];
@@ -28,13 +28,16 @@ io.on('connection', (socket) => {
   socket.userName = name;
 
   if (role === 'student') {
+    // ينتظر موافقة الأستاذ
     pendingStudents[socket.id] = { name, socket };
     io.emit('student_pending', { id: socket.id, name });
     socket.emit('waiting_approval');
   } else {
+    // الأستاذ يدخل مباشرة
     socket.emit('init', { boardState, chatMessages, students: getStudentsList(), chatLocked });
   }
 
+  // الأستاذ يوافق أو يرفض
   socket.on('approve_student', d => {
     if (socket.role !== 'teacher') return;
     const pending = pendingStudents[d.id];
@@ -52,9 +55,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('draw_start', d => { if (socket.role === 'teacher') socket.broadcast.emit('draw_start', d); });
-  socket.on('draw_move',  d => { if (socket.role === 'teacher') { boardState.strokes.push(d); socket.broadcast.emit('draw_move', d); } });
-  socket.on('draw_end',   () => { if (socket.role === 'teacher') socket.broadcast.emit('draw_end'); });
-  socket.on('text', d => { if (socket.role === 'teacher') { boardState.texts.push(d); socket.broadcast.emit('text', d); } });
+  socket.on('draw_move',  d => {
+    if (socket.role === 'teacher') {
+      boardState.strokes.push(d);
+      socket.broadcast.emit('draw_move', d);
+    }
+  });
+  socket.on('draw_end', () => { if (socket.role === 'teacher') socket.broadcast.emit('draw_end'); });
+  socket.on('text', d => {
+    if (socket.role === 'teacher') {
+      boardState.texts.push(d);
+      socket.broadcast.emit('text', d);
+    }
+  });
 
   socket.on('file', d => {
     if (socket.role !== 'teacher') return;
@@ -76,8 +89,10 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('clear');
   });
 
-  socket.on('mic_status',  d => { if (socket.role === 'teacher') socket.broadcast.emit('mic_status', d); });
-  socket.on('audio_chunk', d => { if (socket.role === 'teacher') socket.broadcast.emit('audio_chunk', d); });
+  socket.on('webrtc_offer',  d => socket.broadcast.emit('webrtc_offer',  d));
+  socket.on('webrtc_answer', d => socket.broadcast.emit('webrtc_answer', d));
+  socket.on('webrtc_ice',    d => socket.broadcast.emit('webrtc_ice',    d));
+  socket.on('mic_status',    d => { if (socket.role === 'teacher') socket.broadcast.emit('mic_status', d); });
 
   socket.on('chat', d => {
     if (socket.role === 'student') {
