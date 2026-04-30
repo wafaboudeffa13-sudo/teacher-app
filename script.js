@@ -3,7 +3,6 @@ const ROLE = params.get('role') === 'teacher' ? 'teacher' : 'student';
 let USER_NAME = ROLE === 'teacher' ? '👨‍🏫 الأستاذ' : '';
 let toolbarVisible = true;
 
-// ===== Name Popup =====
 function showNamePopup() {
   document.getElementById('namePopup').style.display = 'flex';
   setTimeout(() => document.getElementById('nameInput').focus(), 150);
@@ -18,7 +17,6 @@ function confirmName() {
 }
 document.getElementById('nameInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmName(); });
 
-// ===== Toolbar Toggle (موبايل) =====
 function toggleToolbar() {
   toolbarVisible = !toolbarVisible;
   document.getElementById('toolbar').classList.toggle('hidden', !toolbarVisible);
@@ -26,14 +24,12 @@ function toggleToolbar() {
   document.getElementById('toolbarToggle').textContent = toolbarVisible ? '✕' : '☰';
 }
 
-// ===== Socket =====
 let socket;
 function initSocket() {
   socket = io({ query: { role: ROLE, name: USER_NAME } });
   setupSocketEvents();
 }
 
-// ===== Elements =====
 const canvas         = document.getElementById('whiteboard');
 const ctx            = canvas.getContext('2d');
 const textInput      = document.getElementById('textInput');
@@ -50,7 +46,6 @@ const lockChatBtn    = document.getElementById('lockChatBtn');
 const pendingSection = document.getElementById('pendingSection');
 const pendingList    = document.getElementById('pendingList');
 
-// ===== State =====
 let tool = 'pen', drawing = false, lastX = 0, lastY = 0;
 let penColor = '#000000', penSize = 3;
 let micOn = false, localStream = null, textPos = { x: 0, y: 0 };
@@ -87,14 +82,24 @@ function togglePanel() {
 // ===== Canvas =====
 function resizeCanvas() {
   const wrapper = document.getElementById('canvas-wrapper');
-  // نحفظ الصورة
   let imgData = null;
   try { imgData = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch(e) {}
+
+  // نرجع الـ transform لـ default باش يحسب الحجم صح
+  canvas.style.transform = '';
   canvas.width  = wrapper.clientWidth;
   canvas.height = wrapper.clientHeight;
+
   if (imgData) ctx.putImageData(imgData, 0, 0);
   resetCtx();
+
+  // نرجع الـ scale
+  if (scale !== 1) {
+    canvas.style.transformOrigin = '0 0';
+    canvas.style.transform = `scale(${scale})`;
+  }
 }
+
 function resetCtx() {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = penColor; ctx.lineWidth = penSize;
@@ -106,18 +111,13 @@ function zoom(delta) {
   scale = Math.min(Math.max(0.5, scale + delta), 3);
   canvas.style.transformOrigin = '0 0';
   canvas.style.transform = `scale(${scale})`;
-  // نضبط حجم الـ wrapper ليتناسب
-  const wrapper = document.getElementById('canvas-wrapper');
-  canvas.style.width  = (wrapper.clientWidth  / scale) + 'px';
-  canvas.style.height = (wrapper.clientHeight / scale) + 'px';
   document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
 }
+
 function resetZoom() {
   scale = 1;
-  canvas.style.transform = 'scale(1)';
-  const wrapper = document.getElementById('canvas-wrapper');
-  canvas.style.width  = wrapper.clientWidth  + 'px';
-  canvas.style.height = wrapper.clientHeight + 'px';
+  canvas.style.transform = '';
+  canvas.style.transformOrigin = '';
   document.getElementById('zoomLevel').textContent = '100%';
 }
 
@@ -160,6 +160,7 @@ function getPos(e) {
     y: (src.clientY - rect.top)  / scale
   };
 }
+
 function startDraw(e) {
   if (ROLE !== 'teacher') return;
   if (e.touches && e.touches.length > 1) return;
@@ -169,6 +170,7 @@ function startDraw(e) {
   const p = getPos(e); lastX = p.x; lastY = p.y;
   socket.emit('draw_start', { x: p.x, y: p.y });
 }
+
 function moveDraw(e) {
   if (!drawing || ROLE !== 'teacher') return;
   if (e.touches && e.touches.length > 1) return;
@@ -178,6 +180,7 @@ function moveDraw(e) {
   drawSeg(data); socket.emit('draw_move', data);
   lastX = p.x; lastY = p.y;
 }
+
 function endDraw() { if (!drawing) return; drawing = false; socket.emit('draw_end'); }
 
 function drawSeg(d) {
@@ -253,7 +256,12 @@ fileInput?.addEventListener('change', e => {
 
 function drawImg(d) {
   const img = new Image();
-  img.onload = () => ctx.drawImage(img, 60, 60, Math.min(380, canvas.width - 80), Math.min(260, canvas.height - 80));
+  img.onload = () => {
+    const maxW = canvas.width  - 80;
+    const maxH = canvas.height - 80;
+    const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
+    ctx.drawImage(img, 40, 40, img.width * ratio, img.height * ratio);
+  };
   img.src = d.data;
 }
 
@@ -329,7 +337,11 @@ async function handleOffer(offer) {
   peerConnection = new RTCPeerConnection(RTC_CONFIG);
   peerConnection.ontrack = e => {
     let audio = document.getElementById('teacherAudio');
-    if (!audio) { audio = document.createElement('audio'); audio.id = 'teacherAudio'; audio.autoplay = true; document.body.appendChild(audio); }
+    if (!audio) {
+      audio = document.createElement('audio');
+      audio.id = 'teacherAudio'; audio.autoplay = true;
+      document.body.appendChild(audio);
+    }
     audio.srcObject = e.streams[0];
   };
   peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('webrtc_ice', e.candidate); };
@@ -406,8 +418,8 @@ function addPending(data) {
   div.className = 'pending-item'; div.id = 'pending_' + data.id;
   div.innerHTML = `
     <span>⏳ ${data.name}</span>
-    <button class="approve" onclick="approveStudent('${data.id}', true)">✅ قبول</button>
-    <button class="reject"  onclick="approveStudent('${data.id}', false)">❌ رفض</button>
+    <button class="approve" onclick="approveStudent('${data.id}', true)">✅</button>
+    <button class="reject"  onclick="approveStudent('${data.id}', false)">❌</button>
   `;
   pendingList.appendChild(div);
   showToast(`🔔 ${data.name} يطلب الدخول`);
@@ -449,7 +461,6 @@ function setupSocketEvents() {
   socket.on('connect',    () => { if (ROLE === 'teacher') showToast('🟢 متصل'); });
   socket.on('disconnect', () => showToast('🔴 انقطع الاتصال'));
 
-  // للتلميذ
   socket.on('waiting_approval', () => {
     document.getElementById('waitingScreen').style.display = 'flex';
   });
@@ -474,7 +485,6 @@ function setupSocketEvents() {
     updateLockBtn();
   });
 
-  // للأستاذ — طالب ينتظر
   socket.on('student_pending', data => {
     if (ROLE === 'teacher') addPending(data);
   });
@@ -491,7 +501,6 @@ function setupSocketEvents() {
     showToast(`📎 ملف: ${d.name}`);
   });
   socket.on('remove_file', d => removeFileFromList(d.name));
-
   socket.on('clear', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); showToast('🗑️ السبورة تمسحت'); });
   socket.on('mic_status', d => {
     micIndicator.style.display = d.on ? 'block' : 'none';
