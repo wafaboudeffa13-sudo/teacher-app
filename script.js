@@ -358,6 +358,36 @@ function stopAudioStream() {
   localStream = null;
 }
 
+// زر الاستماع للتلميذ (iOS وكل المتصفحات)
+function showListenBtn() {
+  let btn = document.getElementById('listenBtn');
+  if (btn) return;
+  btn = document.createElement('button');
+  btn.id = 'listenBtn';
+  btn.textContent = '🔊 اضغط للاستماع للأستاذ';
+  btn.style.cssText = `
+    position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+    background:#00b894; color:#000; border:none; padding:14px 28px;
+    border-radius:30px; font-size:15px; font-weight:bold; cursor:pointer;
+    z-index:1000; box-shadow:0 4px 20px rgba(0,184,148,0.4);
+    animation: pulse 1.5s infinite;
+  `;
+  btn.onclick = async () => {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    await audioContext.resume();
+    btn.remove();
+    showToast('🔊 الآن تسمع الأستاذ');
+  };
+  document.body.appendChild(btn);
+}
+
+function removeListenBtn() {
+  const btn = document.getElementById('listenBtn');
+  if (btn) btn.remove();
+}
+
 async function playAudioChunk(data) {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -535,15 +565,23 @@ function setupSocketEvents() {
     showToast(`📎 ملف: ${d.name}`);
   });
   socket.on('remove_file', d => removeFileFromList(d.name));
-  socket.on('clear', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); showToast('🗑️ السبورة تمسحت'); });
+  socket.on('clear', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    showToast('🗑️ السبورة تمسحت');
+  });
 
   socket.on('mic_status', d => {
     micIndicator.style.display = d.on ? 'block' : 'none';
-    if (d.on) showToast('🎙️ الأستاذ يتكلم');
-    // نفتح AudioContext عند أول تفاعل
-    if (d.on && !audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (ROLE === 'student') {
+      if (d.on) {
+        showListenBtn();
+      } else {
+        removeListenBtn();
+        audioQueue = [];
+        isPlaying = false;
+      }
     }
+    if (d.on) showToast('🎙️ الأستاذ يتكلم');
   });
 
   socket.on('audio_chunk', async d => {
