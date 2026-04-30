@@ -1,27 +1,39 @@
 const params = new URLSearchParams(window.location.search);
 const ROLE = params.get('role') === 'teacher' ? 'teacher' : 'student';
 let USER_NAME = ROLE === 'teacher' ? '👨‍🏫 الأستاذ' : '';
+let toolbarVisible = true;
 
+// ===== Name Popup =====
 function showNamePopup() {
   document.getElementById('namePopup').style.display = 'flex';
-  setTimeout(() => document.getElementById('nameInput').focus(), 100);
+  setTimeout(() => document.getElementById('nameInput').focus(), 150);
 }
 function confirmName() {
   const val = document.getElementById('nameInput').value.trim();
   if (!val) { showToast('⚠️ اكتب اسمك!'); return; }
   USER_NAME = val;
   document.getElementById('namePopup').style.display = 'none';
-  setupRole();
+  document.getElementById('waitingScreen').style.display = 'flex';
   initSocket();
 }
 document.getElementById('nameInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmName(); });
 
+// ===== Toolbar Toggle (موبايل) =====
+function toggleToolbar() {
+  toolbarVisible = !toolbarVisible;
+  document.getElementById('toolbar').classList.toggle('hidden', !toolbarVisible);
+  document.getElementById('main').classList.toggle('toolbar-hidden', !toolbarVisible);
+  document.getElementById('toolbarToggle').textContent = toolbarVisible ? '✕' : '☰';
+}
+
+// ===== Socket =====
 let socket;
 function initSocket() {
   socket = io({ query: { role: ROLE, name: USER_NAME } });
   setupSocketEvents();
 }
 
+// ===== Elements =====
 const canvas         = document.getElementById('whiteboard');
 const ctx            = canvas.getContext('2d');
 const textInput      = document.getElementById('textInput');
@@ -32,11 +44,13 @@ const micIndicator   = document.getElementById('micIndicator');
 const chatMessagesEl = document.getElementById('chatMessages');
 const chatBox        = document.getElementById('chatBox');
 const studentsList   = document.getElementById('studentsList');
-const fileNotif      = document.getElementById('fileNotif');
 const filesSection   = document.getElementById('filesSection');
 const filesList      = document.getElementById('filesList');
 const lockChatBtn    = document.getElementById('lockChatBtn');
+const pendingSection = document.getElementById('pendingSection');
+const pendingList    = document.getElementById('pendingList');
 
+// ===== State =====
 let tool = 'pen', drawing = false, lastX = 0, lastY = 0;
 let penColor = '#000000', penSize = 3;
 let micOn = false, localStream = null, textPos = { x: 0, y: 0 };
@@ -73,10 +87,12 @@ function togglePanel() {
 // ===== Canvas =====
 function resizeCanvas() {
   const wrapper = document.getElementById('canvas-wrapper');
-  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  // نحفظ الصورة
+  let imgData = null;
+  try { imgData = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch(e) {}
   canvas.width  = wrapper.clientWidth;
   canvas.height = wrapper.clientHeight;
-  ctx.putImageData(img, 0, 0);
+  if (imgData) ctx.putImageData(imgData, 0, 0);
   resetCtx();
 }
 function resetCtx() {
@@ -87,14 +103,21 @@ window.addEventListener('resize', resizeCanvas);
 
 // ===== Zoom =====
 function zoom(delta) {
-  scale = Math.min(Math.max(0.3, scale + delta), 4);
+  scale = Math.min(Math.max(0.5, scale + delta), 3);
+  canvas.style.transformOrigin = '0 0';
   canvas.style.transform = `scale(${scale})`;
-  canvas.style.transformOrigin = 'top left';
+  // نضبط حجم الـ wrapper ليتناسب
+  const wrapper = document.getElementById('canvas-wrapper');
+  canvas.style.width  = (wrapper.clientWidth  / scale) + 'px';
+  canvas.style.height = (wrapper.clientHeight / scale) + 'px';
   document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
 }
 function resetZoom() {
   scale = 1;
   canvas.style.transform = 'scale(1)';
+  const wrapper = document.getElementById('canvas-wrapper');
+  canvas.style.width  = wrapper.clientWidth  + 'px';
+  canvas.style.height = wrapper.clientHeight + 'px';
   document.getElementById('zoomLevel').textContent = '100%';
 }
 
@@ -105,14 +128,14 @@ document.getElementById('canvas-wrapper').addEventListener('wheel', e => {
 
 let lastDist = 0;
 canvas.addEventListener('touchstart', e => {
-  if (e.touches.length === 2) lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  if (e.touches.length === 2)
+    lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
 }, { passive: true });
 canvas.addEventListener('touchmove', e => {
   if (e.touches.length === 2) {
     e.preventDefault();
-    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-    zoom((dist - lastDist) * 0.005);
-    lastDist = dist;
+    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    zoom((d - lastDist) * 0.005); lastDist = d;
   }
 }, { passive: false });
 
@@ -156,13 +179,22 @@ function moveDraw(e) {
   lastX = p.x; lastY = p.y;
 }
 function endDraw() { if (!drawing) return; drawing = false; socket.emit('draw_end'); }
+
 function drawSeg(d) {
   ctx.beginPath(); ctx.moveTo(d.x1, d.y1); ctx.lineTo(d.x2, d.y2);
-  if (d.eraser) { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = d.size * 5; ctx.strokeStyle = 'rgba(0,0,0,1)'; }
-  else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = d.color; ctx.lineWidth = d.size; }
+  if (d.eraser) {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = d.size * 5;
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = d.color;
+    ctx.lineWidth = d.size;
+  }
   ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
   ctx.globalCompositeOperation = 'source-over';
 }
+
 canvas.addEventListener('mousedown',  startDraw);
 canvas.addEventListener('mousemove',  moveDraw);
 canvas.addEventListener('mouseup',    endDraw);
@@ -204,7 +236,12 @@ fileInput?.addEventListener('change', e => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = ev => {
-    const data = { name: file.name, type: file.type.startsWith('image/') ? 'image' : 'other', mime: file.type, data: ev.target.result };
+    const data = {
+      name: file.name,
+      type: file.type.startsWith('image/') ? 'image' : 'other',
+      mime: file.type,
+      data: ev.target.result
+    };
     if (data.type === 'image') drawImg(data);
     addFileToList(data, true);
     socket.emit('file', data);
@@ -213,35 +250,45 @@ fileInput?.addEventListener('change', e => {
   reader.readAsDataURL(file);
   fileInput.value = '';
 });
+
 function drawImg(d) {
   const img = new Image();
-  img.onload = () => ctx.drawImage(img, 60, 60, 380, 260);
+  img.onload = () => ctx.drawImage(img, 60, 60, Math.min(380, canvas.width - 80), Math.min(260, canvas.height - 80));
   img.src = d.data;
 }
+
 function addFileToList(d, canDelete) {
   filesSection.style.display = 'block';
-  const id = 'f_' + d.name.replace(/[^a-z0-9]/gi, '_');
-  if (document.getElementById(id)) return;
+  const safeId = 'f_' + d.name.replace(/[^a-z0-9]/gi, '_');
+  if (document.getElementById(safeId)) return;
   const div = document.createElement('div');
-  div.className = 'file-item'; div.id = id;
+  div.className = 'file-item'; div.id = safeId;
   div.innerHTML = `<a href="${d.data}" download="${d.name}" target="_blank">📎 ${d.name}</a>`;
   if (canDelete) {
     const btn = document.createElement('button');
-    btn.textContent = '✕';
+    btn.className = 'del-btn'; btn.textContent = '✕';
     btn.onclick = () => { socket.emit('remove_file', { name: d.name }); removeFileFromList(d.name); };
     div.appendChild(btn);
   }
   filesList.appendChild(div);
 }
+
 function removeFileFromList(name) {
   const el = document.getElementById('f_' + name.replace(/[^a-z0-9]/gi, '_'));
   if (el) el.remove();
   if (!filesList.children.length) filesSection.style.display = 'none';
 }
-function showFileNotif(d) {
-  fileNotif.style.display = 'block';
-  fileNotif.innerHTML = `📎 الأستاذ أرسل: <strong>${d.name}</strong><a href="${d.data}" download="${d.name}">⬇️ تحميل</a>`;
-  setTimeout(() => fileNotif.style.display = 'none', 12000);
+
+function showFilePopup(d) {
+  const popup = document.getElementById('filePopup');
+  const content = document.getElementById('filePopupContent');
+  content.innerHTML = `
+    <div style="margin-bottom:8px">📎 الأستاذ أرسل ملف:</div>
+    <strong style="color:var(--green)">${d.name}</strong>
+    <a class="dl-btn" href="${d.data}" download="${d.name}">⬇️ تحميل الملف</a>
+  `;
+  popup.style.display = 'block';
+  setTimeout(() => popup.style.display = 'none', 15000);
 }
 
 // ===== Clear =====
@@ -319,7 +366,6 @@ function removeMsgEl(id) {
   if (el) el.remove();
 }
 
-// ===== Chat Lock =====
 function toggleChatLock() {
   if (ROLE !== 'teacher') return;
   chatLocked = !chatLocked;
@@ -353,6 +399,29 @@ function updateStudentsList(list) {
 function kickStudent(id) { socket.emit('kick_student', { id }); }
 function muteStudent(id, muted) { socket.emit('mute_student', { id, muted }); }
 
+// ===== Pending =====
+function addPending(data) {
+  pendingSection.style.display = 'block';
+  const div = document.createElement('div');
+  div.className = 'pending-item'; div.id = 'pending_' + data.id;
+  div.innerHTML = `
+    <span>⏳ ${data.name}</span>
+    <button class="approve" onclick="approveStudent('${data.id}', true)">✅ قبول</button>
+    <button class="reject"  onclick="approveStudent('${data.id}', false)">❌ رفض</button>
+  `;
+  pendingList.appendChild(div);
+  showToast(`🔔 ${data.name} يطلب الدخول`);
+}
+function removePending(id) {
+  const el = document.getElementById('pending_' + id);
+  if (el) el.remove();
+  if (!pendingList.children.length) pendingSection.style.display = 'none';
+}
+function approveStudent(id, approved) {
+  socket.emit('approve_student', { id, approved });
+  removePending(id);
+}
+
 // ===== Reactions =====
 function sendReaction(emoji) {
   if (myMuted) return;
@@ -377,37 +446,64 @@ function showToast(msg) {
 
 // ===== Socket Events =====
 function setupSocketEvents() {
-  socket.on('connect',    () => showToast('🟢 متصل'));
+  socket.on('connect',    () => { if (ROLE === 'teacher') showToast('🟢 متصل'); });
   socket.on('disconnect', () => showToast('🔴 انقطع الاتصال'));
+
+  // للتلميذ
+  socket.on('waiting_approval', () => {
+    document.getElementById('waitingScreen').style.display = 'flex';
+  });
+  socket.on('approved', () => {
+    document.getElementById('waitingScreen').style.display = 'none';
+    setupRole();
+    showToast('✅ تم قبولك!');
+  });
+  socket.on('rejected', () => {
+    document.getElementById('waitingScreen').style.display = 'none';
+    document.getElementById('rejectedScreen').style.display = 'flex';
+  });
 
   socket.on('init', state => {
     state.boardState?.strokes?.forEach(s => drawSeg(s));
     state.boardState?.texts?.forEach(t => drawText(t));
     state.boardState?.images?.forEach(i => drawImg(i));
-    state.boardState?.files?.forEach(f => { addFileToList(f, ROLE === 'teacher'); });
+    state.boardState?.files?.forEach(f => addFileToList(f, ROLE === 'teacher'));
     state.chatMessages?.forEach(m => addChatMsg(m));
     updateStudentsList(state.students);
     chatLocked = state.chatLocked || false;
     updateLockBtn();
   });
 
+  // للأستاذ — طالب ينتظر
+  socket.on('student_pending', data => {
+    if (ROLE === 'teacher') addPending(data);
+  });
+
   socket.on('draw_start', d => { ctx.beginPath(); ctx.moveTo(d.x, d.y); });
   socket.on('draw_move',  d => drawSeg(d));
   socket.on('draw_end',   () => {});
   socket.on('text',       d => drawText(d));
+
   socket.on('file', d => {
     if (d.type === 'image') drawImg(d);
-    addFileToList(d, ROLE === 'teacher');
-    if (ROLE !== 'teacher') showFileNotif(d);
+    if (ROLE === 'teacher') addFileToList(d, true);
+    else { addFileToList(d, false); showFilePopup(d); }
     showToast(`📎 ملف: ${d.name}`);
   });
   socket.on('remove_file', d => removeFileFromList(d.name));
+
   socket.on('clear', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); showToast('🗑️ السبورة تمسحت'); });
-  socket.on('mic_status', d => { micIndicator.style.display = d.on ? 'block' : 'none'; if (d.on) showToast('🎙️ الأستاذ يتكلم'); });
+  socket.on('mic_status', d => {
+    micIndicator.style.display = d.on ? 'block' : 'none';
+    if (d.on) showToast('🎙️ الأستاذ يتكلم');
+  });
   socket.on('chat',       m => addChatMsg(m));
-  socket.on('chat_clear', () => { chatMessagesEl.innerHTML = ''; showToast('🔄 تجديد الشات'); });
+  socket.on('chat_clear', () => { chatMessagesEl.innerHTML = ''; });
   socket.on('delete_msg', d => removeMsgEl(d.id));
-  socket.on('chat_lock',  d => { chatLocked = d.locked; updateLockBtn(); showToast(d.locked ? '🔒 الشات مقفول' : '🔓 الشات مفتوح'); });
+  socket.on('chat_lock',  d => {
+    chatLocked = d.locked; updateLockBtn();
+    showToast(d.locked ? '🔒 الشات مقفول' : '🔓 الشات مفتوح');
+  });
   socket.on('students_list', list => updateStudentsList(list));
   socket.on('student_react', d => {
     showFloatingReaction(d.emoji, Math.random() * window.innerWidth * 0.7 + 50, window.innerHeight - 120);
