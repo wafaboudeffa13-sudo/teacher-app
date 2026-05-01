@@ -66,6 +66,10 @@
     .student-item button.revoke { background: rgba(225,112,85,0.2); color: var(--red); }
     .student-item button.kick { background: rgba(225,112,85,0.2); color: var(--red); }
     .student-item button:hover { opacity: 0.85; }
+    .student-item.muted span { opacity: 0.45; }
+    #lockChatBtn { padding: 3px 7px; border-radius: 5px; border: none; background: rgba(253,203,110,0.15); color: var(--yellow); cursor: pointer; font-size: 11px; display: none; }
+    #lockChatBtn.locked { background: rgba(225,112,85,0.2); color: var(--red); }
+    #chatInput input:disabled { opacity: 0.35; cursor: not-allowed; }
     #filesSection { padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.08); display: none; }
     #filesSection h3 { color: #a29bfe; font-size: 12px; margin-bottom: 6px; }
     #filesList { display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
@@ -236,7 +240,8 @@
       </div>
       <div id="chatSection">
         <div id="chatHeader">
-          <h3>💬 الشات (مفتوح للجميع)</h3>
+          <h3>💬 الشات</h3>
+          <button id="lockChatBtn" onclick="toggleChatLock()">🔓 مفتوح</button>
         </div>
         <div id="chatMessages"></div>
         <div id="chatInput">
