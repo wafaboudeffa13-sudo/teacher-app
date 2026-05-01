@@ -4,16 +4,37 @@ let USER_NAME = ROLE === 'teacher' ? '👨‍🏫 الأستاذ' : '';
 let ROOM_ID = params.get('room') || '';
 let toolbarVisible = true;
 
-// كاشف الموبايل
 const IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
 
-// ===== STUN config (مجاني، نفس Google Meet) =====
+// ===== سبورة منطقية ثابتة (نفس الحجم لكل الأجهزة) =====
+const LOGICAL_W = 1280;
+const LOGICAL_H = 720;
+let fitScale = 1;
+
+// ===== STUN + TURN =====
 const RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
-  ]
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ],
+  iceCandidatePoolSize: 10
 };
 
 // ===== فك قفل الصوت في iOS/Safari =====
@@ -68,7 +89,6 @@ function confirmStudent() {
 document.getElementById('nameInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmStudent(); });
 document.getElementById('roomInputStudent')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmStudent(); });
 
-// ===== Share Room Link =====
 function shareRoomLink() {
   const base = window.location.origin + window.location.pathname;
   const link = `${base}?role=student&room=${ROOM_ID}`;
@@ -79,7 +99,6 @@ function shareRoomLink() {
   });
 }
 
-// ===== Toolbar Toggle =====
 function toggleToolbar() {
   toolbarVisible = !toolbarVisible;
   document.getElementById('toolbar').classList.toggle('hidden', !toolbarVisible);
@@ -122,21 +141,17 @@ const audioContainer = document.getElementById('audioContainer');
 let tool = 'pen', drawing = false, lastX = 0, lastY = 0;
 let penColor = '#000000', penSize = 3;
 let micOn = false, textPos = { x: 0, y: 0 };
-let panelOpen = !IS_MOBILE; // الموبايل: مغلق افتراضياً
+let panelOpen = !IS_MOBILE;
 let scale = 1;
-// Chat
-let chatLocked = false;
-let myMuted = false;
-// رفع اليد + مايك التلميذ
-let handRaised = false;
-let micGranted = false;
-let studentMicOn = false;
-const activeSpeakers = new Map(); // id -> name
+let chatLocked = false, myMuted = false;
+let handRaised = false, micGranted = false, studentMicOn = false;
+const activeSpeakers = new Map();
+const blobUrls = new Map(); // file name -> blob URL (للتنظيف لاحقاً)
 
-// ===== WebRTC State =====
-let myStream = null;                       // ستريم المايك ديالي
-const outgoingPeers = new Map();           // listenerId -> SimplePeer (أنا الباث)
-const incomingPeers = new Map();           // broadcasterId -> SimplePeer (أنا اللي نسمع)
+// ===== WebRTC =====
+let myStream = null;
+const outgoingPeers = new Map();
+const incomingPeers = new Map();
 
 // ===== Role =====
 function setupRole() {
@@ -170,19 +185,36 @@ function togglePanel() {
   setTimeout(resizeCanvas, 280);
 }
 
-// ===== Canvas =====
+// ===== Canvas (logical fixed size) =====
 function resizeCanvas() {
-  const wrapper = document.getElementById('canvas-wrapper');
+  // نحفظ الصورة قبل
   let imgData = null;
   try { imgData = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch(e) {}
-  canvas.style.transform = '';
-  canvas.width  = wrapper.clientWidth;
-  canvas.height = wrapper.clientHeight;
+
+  // الـ resolution الداخلي ثابت
+  if (canvas.width !== LOGICAL_W) canvas.width = LOGICAL_W;
+  if (canvas.height !== LOGICAL_H) canvas.height = LOGICAL_H;
+
+  // نحسبو fit في الـ wrapper
+  const wrapper = document.getElementById('canvas-wrapper');
+  const ww = wrapper.clientWidth;
+  const wh = wrapper.clientHeight;
+  fitScale = Math.min(ww / LOGICAL_W, wh / LOGICAL_H);
+
+  canvas.style.width  = (LOGICAL_W * fitScale) + 'px';
+  canvas.style.height = (LOGICAL_H * fitScale) + 'px';
+
   if (imgData) ctx.putImageData(imgData, 0, 0);
   resetCtx();
+  applyZoom();
+}
+function applyZoom() {
   if (scale !== 1) {
-    canvas.style.transformOrigin = '0 0';
     canvas.style.transform = `scale(${scale})`;
+    canvas.style.transformOrigin = '0 0';
+  } else {
+    canvas.style.transform = '';
+    canvas.style.transformOrigin = '';
   }
 }
 function resetCtx() {
@@ -190,19 +222,17 @@ function resetCtx() {
   ctx.strokeStyle = penColor; ctx.lineWidth = penSize;
 }
 window.addEventListener('resize', () => setTimeout(resizeCanvas, 80));
-window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 250));
 
 // ===== Zoom =====
 function zoom(delta) {
   scale = Math.min(Math.max(0.5, scale + delta), 3);
-  canvas.style.transformOrigin = '0 0';
-  canvas.style.transform = `scale(${scale})`;
+  applyZoom();
   document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
 }
 function resetZoom() {
   scale = 1;
-  canvas.style.transform = '';
-  canvas.style.transformOrigin = '';
+  applyZoom();
   document.getElementById('zoomLevel').textContent = '100%';
 }
 document.getElementById('canvas-wrapper').addEventListener('wheel', e => {
@@ -234,20 +264,20 @@ function setTool(t) {
 document.getElementById('colorPicker')?.addEventListener('input', e => { penColor = e.target.value; resetCtx(); });
 document.getElementById('sizeSlider')?.addEventListener('input', e => { penSize = parseInt(e.target.value); resetCtx(); });
 
-// ===== Draw =====
+// ===== Draw — coordinates في الفضاء المنطقي =====
 function getPos(e) {
   const rect = canvas.getBoundingClientRect();
   const src = e.touches ? e.touches[0] : e;
   return {
-    x: (src.clientX - rect.left) / scale,
-    y: (src.clientY - rect.top)  / scale
+    x: ((src.clientX - rect.left) / rect.width)  * LOGICAL_W,
+    y: ((src.clientY - rect.top)  / rect.height) * LOGICAL_H
   };
 }
 function startDraw(e) {
   if (ROLE !== 'teacher') return;
   if (e.touches && e.touches.length > 1) return;
   e.preventDefault();
-  if (tool === 'text') { showTextInput(getPos(e)); return; }
+  if (tool === 'text') { showTextInput(getPos(e), e); return; }
   drawing = true;
   const p = getPos(e); lastX = p.x; lastY = p.y;
   socket.emit('draw_start', { x: p.x, y: p.y });
@@ -285,12 +315,15 @@ canvas.addEventListener('touchmove',  moveDraw,  { passive: false });
 canvas.addEventListener('touchend',   endDraw);
 
 // ===== Text =====
-function showTextInput(pos) {
+function showTextInput(pos, e) {
   textPos = pos;
   const rect = canvas.getBoundingClientRect();
+  // نرجعو من logical لشاشة
+  const sx = rect.left + (pos.x / LOGICAL_W) * rect.width;
+  const sy = rect.top  + (pos.y / LOGICAL_H) * rect.height;
   textInput.style.display = 'block';
-  textInput.style.left = (rect.left + pos.x * scale) + 'px';
-  textInput.style.top  = (rect.top  + pos.y * scale - 18) + 'px';
+  textInput.style.left = sx + 'px';
+  textInput.style.top  = (sy - 18) + 'px';
   textInput.value = '';
   setTimeout(() => textInput.focus(), 10);
 }
@@ -311,7 +344,20 @@ function drawText(d) {
   ctx.fillText(d.text, d.x, d.y);
 }
 
-// ===== Files =====
+// ===== Files — blob URL باش يخدم التحميل في كل التليفونات =====
+function dataUrlToBlobUrl(dataUrl, fallbackMime) {
+  try {
+    const arr = dataUrl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : (fallbackMime || 'application/octet-stream');
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8 = new Uint8Array(n);
+    while(n--) u8[n] = bstr.charCodeAt(n);
+    return URL.createObjectURL(new Blob([u8], { type: mime }));
+  } catch(e) { console.error(e); return dataUrl; }
+}
+
 fileInput?.addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -334,20 +380,28 @@ fileInput?.addEventListener('change', e => {
 function drawImg(d) {
   const img = new Image();
   img.onload = () => {
-    const maxW = canvas.width  - 80;
-    const maxH = canvas.height - 80;
+    const maxW = LOGICAL_W - 80;
+    const maxH = LOGICAL_H - 80;
     const ratio = Math.min(maxW / img.width, maxH / img.height, 1);
     ctx.drawImage(img, 40, 40, img.width * ratio, img.height * ratio);
   };
   img.src = d.data;
 }
+function fileBlobUrl(d) {
+  const key = d.name + '|' + (d.data?.length || 0);
+  if (blobUrls.has(key)) return blobUrls.get(key);
+  const url = dataUrlToBlobUrl(d.data, d.mime);
+  blobUrls.set(key, url);
+  return url;
+}
 function addFileToList(d, canDelete) {
   filesSection.style.display = 'block';
   const safeId = 'f_' + d.name.replace(/[^a-z0-9]/gi, '_');
   if (document.getElementById(safeId)) return;
+  const url = fileBlobUrl(d);
   const div = document.createElement('div');
   div.className = 'file-item'; div.id = safeId;
-  div.innerHTML = `<a href="${d.data}" download="${d.name}" target="_blank">📎 ${d.name}</a>`;
+  div.innerHTML = `<a href="${url}" download="${escapeHtml(d.name)}" target="_blank" rel="noopener">📎 ${escapeHtml(d.name)}</a>`;
   if (canDelete) {
     const btn = document.createElement('button');
     btn.className = 'del-btn'; btn.textContent = '✕';
@@ -364,13 +418,15 @@ function removeFileFromList(name) {
 function showFilePopup(d) {
   const popup = document.getElementById('filePopup');
   const content = document.getElementById('filePopupContent');
+  const url = fileBlobUrl(d);
   content.innerHTML = `
     <div style="margin-bottom:8px">📎 الأستاذ أرسل ملف:</div>
-    <strong style="color:var(--green)">${d.name}</strong>
-    <a class="dl-btn" href="${d.data}" download="${d.name}">⬇️ تحميل الملف</a>
+    <strong style="color:var(--green);display:block;margin-bottom:8px;word-break:break-all">${escapeHtml(d.name)}</strong>
+    <a class="dl-btn" href="${url}" download="${escapeHtml(d.name)}" target="_blank" rel="noopener">⬇️ تحميل الملف</a>
+    <a class="dl-btn" href="${url}" target="_blank" rel="noopener" style="background:var(--purple);margin-right:6px">👁️ فتح</a>
   `;
   popup.style.display = 'block';
-  setTimeout(() => popup.style.display = 'none', 15000);
+  // ما يختفيش تلقائياً، التلميذ يسكر بنفسو
 }
 
 // ===== Clear =====
@@ -380,11 +436,12 @@ function clearBoard() {
   socket.emit('clear'); showToast('🗑️ تم مسح السبورة');
 }
 
-// ===== WebRTC: بث الصوت =====
+// ===== WebRTC =====
 async function startBroadcasting() {
   if (myStream) return true;
   if (typeof SimplePeer === 'undefined') {
     showToast('❌ مكتبة WebRTC ما تحملت — حدّث الصفحة');
+    console.error('SimplePeer is undefined - CDN failed?');
     return false;
   }
   try {
@@ -392,11 +449,12 @@ async function startBroadcasting() {
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: false
     });
+    console.log('✅ Got mic stream', myStream.getAudioTracks());
     socket.emit('start_broadcast');
     return true;
   } catch(err) {
     console.error('mic error:', err);
-    showToast('❌ تعذر فتح المايك (تأكد من الإذن + HTTPS)');
+    showToast('❌ تعذر فتح المايك (إذن أو HTTPS)');
     myStream = null;
     return false;
   }
@@ -414,7 +472,8 @@ function stopBroadcasting() {
 
 function createOutgoingPeer(listenerId) {
   if (outgoingPeers.has(listenerId)) return;
-  if (!myStream) return;
+  if (!myStream) { console.warn('no stream yet'); return; }
+  if (typeof SimplePeer === 'undefined') return;
   let peer;
   try {
     peer = new SimplePeer({
@@ -424,9 +483,11 @@ function createOutgoingPeer(listenerId) {
       config: RTC_CONFIG
     });
   } catch(e) { console.error('createOutgoingPeer:', e); return; }
+  console.log('📡 Creating outgoing peer to', listenerId);
   peer.on('signal', signal => socket.emit('webrtc_signal', { to: listenerId, signal }));
-  peer.on('error', err => console.warn('peer err:', err));
-  peer.on('close', () => outgoingPeers.delete(listenerId));
+  peer.on('connect', () => console.log('✅ Connected to listener', listenerId));
+  peer.on('error', err => console.warn('outgoing peer err:', err));
+  peer.on('close', () => { outgoingPeers.delete(listenerId); console.log('❌ Outgoing closed', listenerId); });
   outgoingPeers.set(listenerId, peer);
 }
 
@@ -447,12 +508,15 @@ function handleIncomingSignal(from, signal) {
         config: RTC_CONFIG
       });
     } catch(e) { console.error('createIncomingPeer:', e); return; }
+    console.log('📡 Creating incoming peer from', from);
     peer.on('signal', sig => socket.emit('webrtc_signal', { to: from, signal: sig }));
-    peer.on('stream', stream => attachRemoteStream(from, stream));
-    peer.on('error', err => console.warn('peer err:', err));
+    peer.on('connect', () => { console.log('✅ Connected to broadcaster', from); showToast('🎧 الصوت متصل'); });
+    peer.on('stream', stream => { console.log('🎧 Got remote stream from', from); attachRemoteStream(from, stream); });
+    peer.on('error', err => console.warn('incoming peer err:', err));
     peer.on('close', () => {
       incomingPeers.delete(from);
       detachRemoteStream(from);
+      console.log('❌ Incoming closed', from);
     });
     incomingPeers.set(from, peer);
   }
@@ -466,10 +530,16 @@ function attachRemoteStream(broadcasterId, stream) {
     audio.id = 'aud_' + broadcasterId;
     audio.autoplay = true;
     audio.playsInline = true;
+    audio.controls = false;
     audioContainer.appendChild(audio);
   }
   audio.srcObject = stream;
-  audio.play().catch(err => console.warn('autoplay blocked:', err));
+  audio.play().then(() => {
+    console.log('▶️ Playing audio from', broadcasterId);
+  }).catch(err => {
+    console.warn('autoplay blocked:', err);
+    showToast('⚠️ المس الشاشة باش تسمع');
+  });
 }
 
 function detachRemoteStream(broadcasterId) {
@@ -498,7 +568,7 @@ async function toggleMic() {
     micBtn.textContent = '🔴 إيقاف';
     micBtn.classList.add('on');
     socket.emit('mic_status', { on: true });
-    showToast('🎙️ المايك شاغل (فوري)');
+    showToast('🎙️ المايك شاغل (Real-time)');
   } else {
     stopBroadcasting();
     micOn = false;
@@ -509,7 +579,7 @@ async function toggleMic() {
   }
 }
 
-// ===== رفع اليد (التلميذ) =====
+// ===== رفع اليد =====
 function toggleRaiseHand() {
   if (ROLE !== 'student') return;
   unlockAudio();
@@ -641,7 +711,6 @@ function approveStudent(id, approved) {
   removePending(id);
 }
 
-// ===== رفع الأيدي (للأستاذ) =====
 function updateRaisedHands(list) {
   if (ROLE !== 'teacher') return;
   if (!list || !list.length) {
@@ -658,15 +727,9 @@ function updateRaisedHands(list) {
     </div>
   `).join('');
 }
-function grantMic(id) {
-  socket.emit('grant_mic', { id });
-  showToast('✅ سمحت للتلميذ بفتح المايك');
-}
-function lowerHand(id) {
-  socket.emit('revoke_mic', { id });
-}
+function grantMic(id) { socket.emit('grant_mic', { id }); showToast('✅ سمحت للتلميذ بفتح المايك'); }
+function lowerHand(id) { socket.emit('revoke_mic', { id }); }
 
-// ===== Reactions =====
 function sendReaction(emoji) {
   if (myMuted) return;
   socket.emit('student_react', { emoji });
@@ -680,7 +743,6 @@ function showFloatingReaction(emoji, x, y) {
   setTimeout(() => el.remove(), 2000);
 }
 
-// ===== Toast =====
 let toastTimer;
 function showToast(msg) {
   toast.textContent = msg; toast.classList.add('show');
@@ -688,7 +750,6 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
 }
 
-// ===== مؤشر "يتكلم الآن" =====
 function refreshSpeakingBanner() {
   const names = Array.from(activeSpeakers.values());
   if (names.length === 0) {
@@ -758,13 +819,11 @@ function setupSocketEvents() {
   socket.on('remove_file', d => removeFileFromList(d.name));
   socket.on('clear', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); showToast('🗑️ السبورة تمسحت'); });
 
-  // ===== مؤشّرات الصوت (UI) =====
   socket.on('mic_status', d => {
     micIndicator.style.display = d.on ? 'block' : 'none';
     if (d.on && ROLE === 'student') showToast('🎙️ الأستاذ يتكلم');
   });
 
-  // ===== مايك التلميذ =====
   socket.on('mic_granted', () => {
     micGranted = true;
     studentMicBtn.classList.add('granted');
@@ -793,32 +852,24 @@ function setupSocketEvents() {
     refreshSpeakingBanner();
   });
 
-  // ===== WebRTC =====
-  // أنا الـ broadcaster: السيرفر بعتلي قائمة المستمعين، نربط peer لكل واحد
   socket.on('broadcast_listeners', listeners => {
     if (!Array.isArray(listeners)) return;
+    console.log('📡 Got listeners:', listeners);
     listeners.forEach(id => createOutgoingPeer(id));
   });
-  // مستمع جديد دخل الغرفة
   socket.on('new_listener', d => {
     if (myStream) createOutgoingPeer(d.id);
   });
-  // مستمع خرج
   socket.on('listener_left', d => destroyOutgoingPeer(d.id));
-  // الـ broadcaster وقف
   socket.on('broadcaster_stopped', d => {
     const peer = incomingPeers.get(d.id);
     if (peer) { try { peer.destroy(); } catch(e){} }
     incomingPeers.delete(d.id);
     detachRemoteStream(d.id);
   });
-  socket.on('broadcaster_started', d => {
-    // معلوماتي فقط — الـ peer ينشأ كي يجيني signal
-  });
-  // إشارة WebRTC قادمة من peer آخر
+  socket.on('broadcaster_started', d => { console.log('📢 Broadcaster started:', d); });
   socket.on('webrtc_signal', d => handleIncomingSignal(d.from, d.signal));
 
-  // ===== شات =====
   socket.on('chat',       m => addChatMsg(m));
   socket.on('chat_clear', () => { chatMessagesEl.innerHTML = ''; });
   socket.on('delete_msg', d => removeMsgEl(d.id));
