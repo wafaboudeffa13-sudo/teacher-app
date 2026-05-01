@@ -1,22 +1,63 @@
 const params = new URLSearchParams(window.location.search);
 const ROLE = params.get('role') === 'teacher' ? 'teacher' : 'student';
 let USER_NAME = ROLE === 'teacher' ? '👨‍🏫 الأستاذ' : '';
+let ROOM_ID = params.get('room') || '';
 let toolbarVisible = true;
 
+// ===== Teacher Popup =====
+function showTeacherPopup() {
+  const popup = document.getElementById('teacherPopup');
+  popup.style.display = 'flex';
+  const input = document.getElementById('roomInput');
+  // إذا كاين room في URL نملأه تلقائياً
+  if (ROOM_ID) input.value = ROOM_ID;
+  setTimeout(() => input.focus(), 150);
+}
+
+function confirmTeacher() {
+  const val = document.getElementById('roomInput').value.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!val) { showToast('⚠️ أدخل كود الغرفة!'); return; }
+  ROOM_ID = val;
+  document.getElementById('teacherPopup').style.display = 'none';
+  setupRole();
+  initSocket();
+}
+document.getElementById('roomInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmTeacher(); });
+
+// ===== Student Popup =====
 function showNamePopup() {
-  document.getElementById('namePopup').style.display = 'flex';
+  const popup = document.getElementById('namePopup');
+  popup.style.display = 'flex';
+  if (ROOM_ID) document.getElementById('roomInputStudent').value = ROOM_ID;
   setTimeout(() => document.getElementById('nameInput').focus(), 150);
 }
-function confirmName() {
-  const val = document.getElementById('nameInput').value.trim();
-  if (!val) { showToast('⚠️ اكتب اسمك!'); return; }
-  USER_NAME = val;
+
+function confirmStudent() {
+  const name = document.getElementById('nameInput').value.trim();
+  const room = document.getElementById('roomInputStudent').value.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!name) { showToast('⚠️ اكتب اسمك!'); return; }
+  if (!room) { showToast('⚠️ أدخل كود الغرفة!'); return; }
+  USER_NAME = name;
+  ROOM_ID = room;
   document.getElementById('namePopup').style.display = 'none';
   document.getElementById('waitingScreen').style.display = 'flex';
   initSocket();
 }
-document.getElementById('nameInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmName(); });
+document.getElementById('nameInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmStudent(); });
+document.getElementById('roomInputStudent')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmStudent(); });
 
+// ===== Share Room Link =====
+function shareRoomLink() {
+  const base = window.location.origin + window.location.pathname;
+  const link = `${base}?role=student&room=${ROOM_ID}`;
+  navigator.clipboard.writeText(link).then(() => {
+    showToast('✅ تم نسخ رابط التلاميذ!');
+  }).catch(() => {
+    prompt('انسخ هذا الرابط:', link);
+  });
+}
+
+// ===== Toolbar Toggle =====
 function toggleToolbar() {
   toolbarVisible = !toolbarVisible;
   document.getElementById('toolbar').classList.toggle('hidden', !toolbarVisible);
@@ -24,12 +65,14 @@ function toggleToolbar() {
   document.getElementById('toolbarToggle').textContent = toolbarVisible ? '✕' : '☰';
 }
 
+// ===== Socket =====
 let socket;
 function initSocket() {
-  socket = io({ query: { role: ROLE, name: USER_NAME } });
+  socket = io({ query: { role: ROLE, name: USER_NAME, room: ROOM_ID } });
   setupSocketEvents();
 }
 
+// ===== Elements =====
 const canvas         = document.getElementById('whiteboard');
 const ctx            = canvas.getContext('2d');
 const textInput      = document.getElementById('textInput');
@@ -46,37 +89,22 @@ const lockChatBtn    = document.getElementById('lockChatBtn');
 const pendingSection = document.getElementById('pendingSection');
 const pendingList    = document.getElementById('pendingList');
 
+// ===== State =====
 let tool = 'pen', drawing = false, lastX = 0, lastY = 0;
 let penColor = '#000000', penSize = 3;
 let micOn = false, localStream = null, textPos = { x: 0, y: 0 };
 let panelOpen = true, chatLocked = false, myMuted = false;
-let scale = 1, peerConnection = null;
-
-const RTC_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  ]
-};
+let scale = 1;
+let mediaRecorder = null;
+let audioContext = null;
+let audioQueue = [];
+let isPlaying = false;
 
 // ===== Role =====
 function setupRole() {
   const badge = document.getElementById('roleBadge');
+  const roomBadge = document.getElementById('roomBadge');
+  roomBadge.textContent = `🏫 ${ROOM_ID}`;
   if (ROLE === 'teacher') {
     badge.textContent = '👨‍🏫 الأستاذ';
     badge.className = 'teacher';
@@ -115,7 +143,6 @@ function resizeCanvas() {
     canvas.style.transform = `scale(${scale})`;
   }
 }
-
 function resetCtx() {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = penColor; ctx.lineWidth = penSize;
@@ -135,7 +162,6 @@ function resetZoom() {
   canvas.style.transformOrigin = '';
   document.getElementById('zoomLevel').textContent = '100%';
 }
-
 document.getElementById('canvas-wrapper').addEventListener('wheel', e => {
   e.preventDefault();
   zoom(e.deltaY < 0 ? 0.1 : -0.1);
@@ -265,7 +291,6 @@ fileInput?.addEventListener('change', e => {
   reader.readAsDataURL(file);
   fileInput.value = '';
 });
-
 function drawImg(d) {
   const img = new Image();
   img.onload = () => {
@@ -276,7 +301,6 @@ function drawImg(d) {
   };
   img.src = d.data;
 }
-
 function addFileToList(d, canDelete) {
   filesSection.style.display = 'block';
   const safeId = 'f_' + d.name.replace(/[^a-z0-9]/gi, '_');
@@ -292,13 +316,11 @@ function addFileToList(d, canDelete) {
   }
   filesList.appendChild(div);
 }
-
 function removeFileFromList(name) {
   const el = document.getElementById('f_' + name.replace(/[^a-z0-9]/gi, '_'));
   if (el) el.remove();
   if (!filesList.children.length) filesSection.style.display = 'none';
 }
-
 function showFilePopup(d) {
   const popup = document.getElementById('filePopup');
   const content = document.getElementById('filePopupContent');
@@ -323,44 +345,100 @@ async function toggleMic() {
   if (ROLE !== 'teacher') return;
   if (!micOn) {
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micOn = true; micBtn.textContent = '🔴 إيقاف'; micBtn.classList.add('on');
-      socket.emit('mic_status', { on: true }); showToast('🎙️ المايك شاغل');
-      await startWebRTC();
-    } catch { showToast('❌ تعذر فتح المايك'); }
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      micOn = true;
+      micBtn.textContent = '🔴 إيقاف';
+      micBtn.classList.add('on');
+      socket.emit('mic_status', { on: true });
+      showToast('🎙️ المايك شاغل');
+      startAudioStream();
+    } catch(err) {
+      showToast('❌ تعذر فتح المايك');
+    }
   } else {
-    stopWebRTC(); micOn = false; micBtn.textContent = '🎙️ مايك'; micBtn.classList.remove('on');
-    socket.emit('mic_status', { on: false }); showToast('🔇 المايك موقوف');
+    stopAudioStream();
+    micOn = false;
+    micBtn.textContent = '🎙️ مايك';
+    micBtn.classList.remove('on');
+    socket.emit('mic_status', { on: false });
+    showToast('🔇 المايك موقوف');
   }
 }
-async function startWebRTC() {
-  peerConnection = new RTCPeerConnection(RTC_CONFIG);
-  localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-  peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('webrtc_ice', e.candidate); };
-  const offer = await peerConnection.createOffer();
-  await peerConnection.setLocalDescription(offer);
-  socket.emit('webrtc_offer', offer);
+
+function getSupportedMimeType() {
+  const types = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4'];
+  for (const type of types) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return '';
 }
-function stopWebRTC() {
+
+function startAudioStream() {
+  const mimeType = getSupportedMimeType();
+  try {
+    mediaRecorder = new MediaRecorder(localStream, mimeType ? { mimeType } : {});
+    mediaRecorder.ondataavailable = async (e) => {
+      if (e.data && e.data.size > 0) {
+        const buffer = await e.data.arrayBuffer();
+        socket.emit('audio_chunk', { buffer, mimeType: mediaRecorder.mimeType });
+      }
+    };
+    mediaRecorder.start(150);
+  } catch(err) {
+    showToast('❌ المايك ما خدمش على هذا المتصفح');
+  }
+}
+
+function stopAudioStream() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  mediaRecorder = null;
   localStream?.getTracks().forEach(t => t.stop());
-  peerConnection?.close(); peerConnection = null; localStream = null;
+  localStream = null;
 }
-async function handleOffer(offer) {
-  peerConnection = new RTCPeerConnection(RTC_CONFIG);
-  peerConnection.ontrack = e => {
-    let audio = document.getElementById('teacherAudio');
-    if (!audio) {
-      audio = document.createElement('audio');
-      audio.id = 'teacherAudio'; audio.autoplay = true;
-      document.body.appendChild(audio);
-    }
-    audio.srcObject = e.streams[0];
+
+function showListenBtn() {
+  let btn = document.getElementById('listenBtn');
+  if (btn) return;
+  btn = document.createElement('button');
+  btn.id = 'listenBtn';
+  btn.textContent = '🔊 اضغط للاستماع للأستاذ';
+  btn.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#00b894;color:#000;border:none;padding:14px 28px;border-radius:30px;font-size:15px;font-weight:bold;cursor:pointer;z-index:1000;box-shadow:0 4px 20px rgba(0,184,148,0.4);`;
+  btn.onclick = async () => {
+    if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    await audioContext.resume();
+    btn.remove();
+    showToast('🔊 الآن تسمع الأستاذ');
   };
-  peerConnection.onicecandidate = e => { if (e.candidate) socket.emit('webrtc_ice', e.candidate); };
-  await peerConnection.setRemoteDescription(offer);
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-  socket.emit('webrtc_answer', answer);
+  document.body.appendChild(btn);
+}
+
+function removeListenBtn() {
+  const btn = document.getElementById('listenBtn');
+  if (btn) btn.remove();
+}
+
+async function playAudioChunk(data) {
+  if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioContext.state === 'suspended') await audioContext.resume();
+  audioQueue.push(data);
+  if (!isPlaying) processAudioQueue();
+}
+
+async function processAudioQueue() {
+  if (audioQueue.length === 0) { isPlaying = false; return; }
+  isPlaying = true;
+  const data = audioQueue.shift();
+  try {
+    const arrayBuffer = data.buffer instanceof ArrayBuffer
+      ? data.buffer
+      : new Uint8Array(Object.values(data.buffer)).buffer;
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.onended = processAudioQueue;
+    source.start();
+  } catch(e) { processAudioQueue(); }
 }
 
 // ===== Chat =====
@@ -389,7 +467,6 @@ function removeMsgEl(id) {
   const el = chatMessagesEl.querySelector(`[data-id="${id}"]`);
   if (el) el.remove();
 }
-
 function toggleChatLock() {
   if (ROLE !== 'teacher') return;
   chatLocked = !chatLocked;
@@ -495,6 +572,10 @@ function setupSocketEvents() {
     updateStudentsList(state.students);
     chatLocked = state.chatLocked || false;
     updateLockBtn();
+    if (state.roomId) {
+      ROOM_ID = state.roomId;
+      document.getElementById('roomBadge').textContent = `🏫 ${ROOM_ID}`;
+    }
   });
 
   socket.on('student_pending', data => {
@@ -514,10 +595,19 @@ function setupSocketEvents() {
   });
   socket.on('remove_file', d => removeFileFromList(d.name));
   socket.on('clear', () => { ctx.clearRect(0, 0, canvas.width, canvas.height); showToast('🗑️ السبورة تمسحت'); });
+
   socket.on('mic_status', d => {
     micIndicator.style.display = d.on ? 'block' : 'none';
+    if (ROLE === 'student') {
+      if (d.on) showListenBtn();
+      else { removeListenBtn(); audioQueue = []; isPlaying = false; }
+    }
     if (d.on) showToast('🎙️ الأستاذ يتكلم');
   });
+  socket.on('audio_chunk', async d => {
+    if (ROLE === 'student') await playAudioChunk(d);
+  });
+
   socket.on('chat',       m => addChatMsg(m));
   socket.on('chat_clear', () => { chatMessagesEl.innerHTML = ''; });
   socket.on('delete_msg', d => removeMsgEl(d.id));
@@ -538,9 +628,6 @@ function setupSocketEvents() {
   socket.on('kicked', () => {
     document.getElementById('kickedScreen').style.display = 'flex';
   });
-  socket.on('webrtc_offer',  async o => { if (ROLE === 'student') await handleOffer(o); });
-  socket.on('webrtc_answer', async a => { if (peerConnection) await peerConnection.setRemoteDescription(a); });
-  socket.on('webrtc_ice',    async c => { if (peerConnection) await peerConnection.addIceCandidate(c); });
 }
 
 // ===== Init =====
@@ -548,6 +635,5 @@ resizeCanvas();
 if (ROLE === 'student') {
   showNamePopup();
 } else {
-  setupRole();
-  initSocket();
+  showTeacherPopup();
 }
