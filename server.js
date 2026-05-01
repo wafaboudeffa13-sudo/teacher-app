@@ -20,10 +20,12 @@ function getRoom(roomId) {
       chatMessages: [],
       students: {},                // { id: { name, muted } }
       pendingStudents: {},
-      chatLocked: false,           // الأستاذ يقفل الشات
+      chatLocked: false,
       raisedHands: {},             // { socketId: name }
       micGrants: new Set(),        // socket IDs مع إذن مايك
-      activeMics: new Set()        // socket IDs اللي المايك مفتوح
+      activeMics: new Set(),       // socket IDs اللي المايك مفتوح
+      broadcasters: new Set(),     // socket IDs اللي يبثو الصوت (WebRTC)
+      teacherMicOn: false
     };
     setInterval(() => {
       if (rooms[roomId]) {
@@ -50,6 +52,19 @@ function getRaisedHandsList(room) {
   return Object.entries(room.raisedHands).map(([id, name]) => ({ id, name }));
 }
 
+// نجمع الـ listeners (الناس اللي راهم في الغرفة ماعدا الـ broadcaster والـ pending)
+function getListenerIds(roomId, excludeId, room) {
+  const ids = [];
+  const roomSockets = io.sockets.adapter.rooms.get(roomId);
+  if (!roomSockets) return ids;
+  roomSockets.forEach(sid => {
+    if (sid === excludeId) return;
+    if (room.pendingStudents[sid]) return; // pending ما يسمعش
+    ids.push(sid);
+  });
+  return ids;
+}
+
 io.on('connection', (socket) => {
   const role   = socket.handshake.query.role;
   const name   = socket.handshake.query.name || '👨‍🎓 تلميذ';
@@ -73,6 +88,8 @@ io.on('connection', (socket) => {
       students: getStudentsList(room),
       raisedHands: getRaisedHandsList(room),
       chatLocked: room.chatLocked,
+      teacherMicOn: room.teacherMicOn,
+      activeBroadcasters: Array.from(room.broadcasters),
       roomId
     });
   }
@@ -92,9 +109,15 @@ io.on('connection', (socket) => {
         students: getStudentsList(room),
         raisedHands: getRaisedHandsList(room),
         chatLocked: room.chatLocked,
+        teacherMicOn: room.teacherMicOn,
+        activeBroadcasters: Array.from(room.broadcasters),
         roomId
       });
       io.to(roomId).emit('students_list', getStudentsList(room));
+      // نخبّر الـ broadcasters باش يربطو peer جديد للتلميذ الجديد
+      room.broadcasters.forEach(bid => {
+        io.to(bid).emit('new_listener', { id: pending.socket.id });
+      });
     } else {
       pending.socket.emit('rejected');
       pending.socket.disconnect();
@@ -136,9 +159,41 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('clear');
   });
 
-  // ===== مايك الأستاذ =====
-  socket.on('mic_status',  d => { if (socket.role === 'teacher') socket.to(roomId).emit('mic_status', d); });
-  socket.on('audio_chunk', d => { if (socket.role === 'teacher') socket.to(roomId).emit('audio_chunk', d); });
+  // ===== مايك الأستاذ — UI فقط، الصوت عبر WebRTC =====
+  socket.on('mic_status', d => {
+    if (socket.role !== 'teacher') return;
+    room.teacherMicOn = !!d.on;
+    socket.to(roomId).emit('mic_status', d);
+  });
+
+  // ===== WebRTC: بدء البث =====
+  socket.on('start_broadcast', () => {
+    const allowed = (socket.role === 'teacher') || (socket.role === 'student' && room.micGrants.has(socket.id));
+    if (!allowed) return;
+    room.broadcasters.add(socket.id);
+    const listeners = getListenerIds(roomId, socket.id, room);
+    socket.emit('broadcast_listeners', listeners);
+    socket.to(roomId).emit('broadcaster_started', {
+      id: socket.id,
+      name: socket.userName,
+      role: socket.role
+    });
+  });
+
+  socket.on('stop_broadcast', () => {
+    if (room.broadcasters.delete(socket.id)) {
+      socket.to(roomId).emit('broadcaster_stopped', { id: socket.id, name: socket.userName });
+    }
+  });
+
+  // ===== WebRTC: تمرير الإشارات بين الـ peers =====
+  socket.on('webrtc_signal', d => {
+    if (!d || !d.to || !d.signal) return;
+    const target = io.sockets.sockets.get(d.to);
+    if (!target) return;
+    if (target.roomId !== socket.roomId) return; // أمان: نفس الغرفة فقط
+    target.emit('webrtc_signal', { from: socket.id, signal: d.signal });
+  });
 
   // ===== الشات (مع تحكم الأستاذ) =====
   socket.on('chat', d => {
@@ -223,6 +278,10 @@ io.on('connection', (socket) => {
     const wasActive = room.activeMics.has(d.id);
     room.activeMics.delete(d.id);
     delete room.raisedHands[d.id];
+    if (room.broadcasters.has(d.id)) {
+      room.broadcasters.delete(d.id);
+      io.to(roomId).emit('broadcaster_stopped', { id: d.id, name: room.students[d.id]?.name || '' });
+    }
     const target = io.sockets.sockets.get(d.id);
     if (target) target.emit('mic_revoked');
     if (wasActive) {
@@ -233,7 +292,7 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('students_list', getStudentsList(room));
   });
 
-  // ===== مايك التلميذ يبث للجميع =====
+  // ===== مؤشّر مايك التلميذ (UI فقط) =====
   socket.on('student_mic_status', d => {
     if (socket.role !== 'student') return;
     if (!room.micGrants.has(socket.id)) return;
@@ -243,15 +302,13 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('students_list', getStudentsList(room));
   });
 
-  socket.on('student_audio_chunk', d => {
-    if (socket.role !== 'student') return;
-    if (!room.micGrants.has(socket.id)) return;
-    socket.to(roomId).emit('student_audio_chunk', { ...d, id: socket.id, name: socket.userName });
-  });
-
   // ===== انفصال =====
   socket.on('disconnect', () => {
     delete room.pendingStudents[socket.id];
+    const wasBroadcaster = room.broadcasters.delete(socket.id);
+    if (wasBroadcaster) {
+      socket.to(roomId).emit('broadcaster_stopped', { id: socket.id, name: socket.userName });
+    }
     if (role === 'student') {
       const wasActive = room.activeMics.has(socket.id);
       delete room.students[socket.id];
@@ -264,6 +321,14 @@ io.on('connection', (socket) => {
       io.to(roomId).emit('students_list', getStudentsList(room));
       io.to(roomId).emit('raised_hands', getRaisedHandsList(room));
     }
+    if (role === 'teacher') {
+      room.teacherMicOn = false;
+    }
+    // نخبّر الـ broadcasters باش يحيدو الـ peer ديال هاد الواحد
+    room.broadcasters.forEach(bid => {
+      io.to(bid).emit('listener_left', { id: socket.id });
+    });
+    // إذا الغرفة فارغة نمسحها
     if (Object.keys(room.students).length === 0 && Object.keys(room.pendingStudents).length === 0) {
       delete rooms[roomId];
     }
