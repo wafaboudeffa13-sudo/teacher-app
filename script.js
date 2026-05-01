@@ -4,20 +4,20 @@ let USER_NAME = ROLE === 'teacher' ? '👨‍🏫 الأستاذ' : '';
 let ROOM_ID = params.get('room') || '';
 let toolbarVisible = true;
 
-// ===== AudioContext (نفعّله مع أول ضغطة المستخدم) =====
-let audioContext = null;
-const audioQueues = new Map(); // sourceId -> { queue: [], playing: false }
-
-function ensureAudioContext() {
+// ===== فك قفل الصوت في iOS/Safari (silent mp3) =====
+const SILENT_MP3 = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/zQsQbAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/zQMSkAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
+let audioUnlocked = false;
+function unlockAudio() {
+  if (audioUnlocked) return;
   try {
-    if (!audioContext) {
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioContext.state === 'suspended') {
-      audioContext.resume().catch(() => {});
-    }
-  } catch (e) { /* ignore */ }
-  return audioContext;
+    const a = new Audio(SILENT_MP3);
+    a.play().then(() => { audioUnlocked = true; }).catch(() => {});
+    // AudioContext (احتياط)
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      ctx.resume().catch(() => {});
+    } catch(e) {}
+  } catch(e) {}
 }
 
 // ===== Teacher Popup =====
@@ -33,7 +33,7 @@ function confirmTeacher() {
   if (!val) { showToast('⚠️ أدخل كود الغرفة!'); return; }
   ROOM_ID = val;
   document.getElementById('teacherPopup').style.display = 'none';
-  ensureAudioContext(); // تفعيل الصوت بضغطة المستخدم
+  unlockAudio(); // ضغطة المستخدم → نفك قفل الصوت
   setupRole();
   initSocket();
 }
@@ -55,7 +55,7 @@ function confirmStudent() {
   ROOM_ID = room;
   document.getElementById('namePopup').style.display = 'none';
   document.getElementById('waitingScreen').style.display = 'flex';
-  ensureAudioContext(); // تفعيل الصوت بضغطة المستخدم — باش يسمع الأستاذ تلقائياً
+  unlockAudio(); // ضغطة المستخدم → نفك قفل الصوت تلقائياً
   initSocket();
 }
 document.getElementById('nameInput')?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmStudent(); });
@@ -100,6 +100,7 @@ const chatBox        = document.getElementById('chatBox');
 const studentsList   = document.getElementById('studentsList');
 const filesSection   = document.getElementById('filesSection');
 const filesList      = document.getElementById('filesList');
+const lockChatBtn    = document.getElementById('lockChatBtn');
 const pendingSection = document.getElementById('pendingSection');
 const pendingList    = document.getElementById('pendingList');
 const handsSection   = document.getElementById('handsSection');
@@ -114,13 +115,19 @@ let penColor = '#000000', penSize = 3;
 let micOn = false, localStream = null, textPos = { x: 0, y: 0 };
 let panelOpen = true;
 let scale = 1;
-let mediaRecorder = null;
+// Recording (clips كاملة)
+let teacherRecording = false;
+let teacherRecorder = null;
+let studentRecording = false;
+let studentRecorder = null;
+let studentLocalStream = null;
+const CLIP_MS = 1500; // 1.5 ثانية لكل clip
+// Chat
+let chatLocked = false;
+let myMuted = false;
 // رفع اليد + مايك التلميذ
 let handRaised = false;
 let micGranted = false;
-let studentMicOn = false;
-let studentMediaRecorder = null;
-let studentLocalStream = null;
 const activeSpeakers = new Map(); // id -> name
 
 // ===== Role =====
@@ -132,12 +139,14 @@ function setupRole() {
     badge.textContent = '👨‍🏫 الأستاذ';
     badge.className = 'teacher';
     document.getElementById('teacherTools').style.display = 'flex';
+    if (lockChatBtn) lockChatBtn.style.display = 'block';
   } else {
     badge.textContent = `👨‍🎓 ${USER_NAME}`;
     badge.className = 'student';
     document.getElementById('studentTools').style.display = 'flex';
     document.getElementById('reactions').style.display = 'flex';
     canvas.style.cursor = 'default';
+    if (lockChatBtn) lockChatBtn.style.display = 'none';
   }
 }
 
@@ -358,32 +367,7 @@ function clearBoard() {
   socket.emit('clear'); showToast('🗑️ تم مسح السبورة');
 }
 
-// ===== مايك الأستاذ =====
-async function toggleMic() {
-  if (ROLE !== 'teacher') return;
-  if (!micOn) {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      micOn = true;
-      micBtn.textContent = '🔴 إيقاف';
-      micBtn.classList.add('on');
-      socket.emit('mic_status', { on: true });
-      showToast('🎙️ المايك شاغل');
-      startTeacherAudioStream();
-    } catch(err) {
-      console.error(err);
-      showToast('❌ تعذر فتح المايك (تأكد من الإذن)');
-    }
-  } else {
-    stopTeacherAudioStream();
-    micOn = false;
-    micBtn.textContent = '🎙️ مايك';
-    micBtn.classList.remove('on');
-    socket.emit('mic_status', { on: false });
-    showToast('🔇 المايك موقوف');
-  }
-}
-
+// ===== الصوت: نختار format يدعمه المتصفح =====
 function getSupportedMimeType() {
   if (typeof MediaRecorder === 'undefined') return '';
   const types = [
@@ -391,8 +375,8 @@ function getSupportedMimeType() {
     'audio/webm',
     'audio/ogg;codecs=opus',
     'audio/ogg',
-    'audio/mp4',
     'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
     'audio/aac'
   ];
   for (const type of types) {
@@ -401,60 +385,98 @@ function getSupportedMimeType() {
   return '';
 }
 
-function startTeacherAudioStream() {
-  const mimeType = getSupportedMimeType();
-  try {
-    mediaRecorder = new MediaRecorder(localStream, mimeType ? { mimeType, audioBitsPerSecond: 64000 } : {});
-    mediaRecorder.ondataavailable = async (e) => {
-      if (e.data && e.data.size > 0) {
-        const buffer = await e.data.arrayBuffer();
-        socket.emit('audio_chunk', { buffer, mimeType: mediaRecorder.mimeType });
-      }
-    };
-    mediaRecorder.start(200);
-  } catch(err) {
-    console.error(err);
-    showToast('❌ المايك ما خدمش على هذا المتصفح');
-  }
-}
-
-function stopTeacherAudioStream() {
-  try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(e) {}
-  mediaRecorder = null;
-  localStream?.getTracks().forEach(t => t.stop());
-  localStream = null;
-}
-
-// ===== رفع اليد (التلميذ) =====
-function toggleRaiseHand() {
-  if (ROLE !== 'student') return;
-  ensureAudioContext();
-  handRaised = !handRaised;
-  raiseHandBtn.classList.toggle('raised', handRaised);
-  socket.emit('raise_hand', { raised: handRaised });
-  showToast(handRaised ? '✋ رفعت يدك — انتظر الأستاذ' : '✋ خفضت يدك');
-}
-
-// ===== مايك التلميذ =====
-async function toggleStudentMic() {
-  if (ROLE !== 'student' || !micGranted) return;
-  if (!studentMicOn) {
+// ===== مايك الأستاذ — clips كاملة =====
+async function toggleMic() {
+  if (ROLE !== 'teacher') return;
+  if (!micOn) {
     try {
-      studentLocalStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      studentMicOn = true;
-      studentMicBtn.classList.add('on');
-      studentMicBtn.textContent = '🔴';
-      studentMicBtn.title = 'اوقف المايك';
-      socket.emit('student_mic_status', { on: true });
-      startStudentAudioStream();
-      showToast('🎙️ مايكك شاغل — تكلم!');
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false
+      });
+      micOn = true;
+      teacherRecording = true;
+      micBtn.textContent = '🔴 إيقاف';
+      micBtn.classList.add('on');
+      socket.emit('mic_status', { on: true });
+      showToast('🎙️ المايك شاغل');
+      recordTeacherClip();
     } catch(err) {
       console.error(err);
       showToast('❌ تعذر فتح المايك (تأكد من الإذن)');
     }
   } else {
-    stopStudentAudioStream();
-    studentMicOn = false;
+    teacherRecording = false;
+    try { if (teacherRecorder && teacherRecorder.state !== 'inactive') teacherRecorder.stop(); } catch(e) {}
+    teacherRecorder = null;
+    localStream?.getTracks().forEach(t => t.stop());
+    localStream = null;
+    micOn = false;
+    micBtn.textContent = '🎙️ مايك';
+    micBtn.classList.remove('on');
+    socket.emit('mic_status', { on: false });
+    showToast('🔇 المايك موقوف');
+  }
+}
+
+function recordTeacherClip() {
+  if (!teacherRecording || !localStream) return;
+  const mimeType = getSupportedMimeType();
+  const chunks = [];
+  let recorder;
+  try {
+    recorder = new MediaRecorder(localStream, mimeType ? { mimeType, audioBitsPerSecond: 64000 } : {});
+  } catch(err) {
+    console.error(err);
+    showToast('❌ المايك ما خدمش على المتصفح');
+    return;
+  }
+  teacherRecorder = recorder;
+  recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = async () => {
+    if (chunks.length > 0) {
+      try {
+        const blob = new Blob(chunks, { type: recorder.mimeType });
+        const buffer = await blob.arrayBuffer();
+        socket.emit('audio_chunk', { buffer, mimeType: recorder.mimeType });
+      } catch(e) { console.error(e); }
+    }
+    if (teacherRecording) recordTeacherClip();
+  };
+  try {
+    recorder.start();
+    setTimeout(() => { try { if (recorder.state === 'recording') recorder.stop(); } catch(e) {} }, CLIP_MS);
+  } catch(err) {
+    console.error(err);
+  }
+}
+
+// ===== مايك التلميذ — clips كاملة =====
+async function toggleStudentMic() {
+  if (ROLE !== 'student' || !micGranted) return;
+  if (!studentRecording) {
+    try {
+      studentLocalStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false
+      });
+      studentRecording = true;
+      studentMicBtn.classList.add('on');
+      studentMicBtn.textContent = '🔴';
+      studentMicBtn.title = 'اوقف المايك';
+      socket.emit('student_mic_status', { on: true });
+      showToast('🎙️ مايكك شاغل — تكلم!');
+      recordStudentClip();
+    } catch(err) {
+      console.error(err);
+      showToast('❌ تعذر فتح المايك (تأكد من الإذن)');
+    }
+  } else {
+    studentRecording = false;
+    try { if (studentRecorder && studentRecorder.state !== 'inactive') studentRecorder.stop(); } catch(e) {}
+    studentRecorder = null;
+    studentLocalStream?.getTracks().forEach(t => t.stop());
+    studentLocalStream = null;
     studentMicBtn.classList.remove('on');
     studentMicBtn.textContent = '🎙️';
     studentMicBtn.title = 'افتح المايك';
@@ -463,76 +485,106 @@ async function toggleStudentMic() {
   }
 }
 
-function startStudentAudioStream() {
+function recordStudentClip() {
+  if (!studentRecording || !studentLocalStream) return;
   const mimeType = getSupportedMimeType();
+  const chunks = [];
+  let recorder;
   try {
-    studentMediaRecorder = new MediaRecorder(studentLocalStream, mimeType ? { mimeType, audioBitsPerSecond: 64000 } : {});
-    studentMediaRecorder.ondataavailable = async (e) => {
-      if (e.data && e.data.size > 0) {
-        const buffer = await e.data.arrayBuffer();
-        socket.emit('student_audio_chunk', { buffer, mimeType: studentMediaRecorder.mimeType });
-      }
-    };
-    studentMediaRecorder.start(200);
+    recorder = new MediaRecorder(studentLocalStream, mimeType ? { mimeType, audioBitsPerSecond: 64000 } : {});
   } catch(err) {
     console.error(err);
-    showToast('❌ المايك ما خدمش على هذا المتصفح');
+    showToast('❌ المايك ما خدمش على المتصفح');
+    return;
+  }
+  studentRecorder = recorder;
+  recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = async () => {
+    if (chunks.length > 0) {
+      try {
+        const blob = new Blob(chunks, { type: recorder.mimeType });
+        const buffer = await blob.arrayBuffer();
+        socket.emit('student_audio_chunk', { buffer, mimeType: recorder.mimeType });
+      } catch(e) { console.error(e); }
+    }
+    if (studentRecording) recordStudentClip();
+  };
+  try {
+    recorder.start();
+    setTimeout(() => { try { if (recorder.state === 'recording') recorder.stop(); } catch(e) {} }, CLIP_MS);
+  } catch(err) {
+    console.error(err);
   }
 }
 
-function stopStudentAudioStream() {
-  try { if (studentMediaRecorder && studentMediaRecorder.state !== 'inactive') studentMediaRecorder.stop(); } catch(e) {}
-  studentMediaRecorder = null;
-  studentLocalStream?.getTracks().forEach(t => t.stop());
-  studentLocalStream = null;
+// ===== تشغيل clip كاملة عبر <audio> (متوافق مع iOS / Android / PC) =====
+const playbackQueues = new Map(); // sourceId -> { queue:[], playing:false }
+
+function bufferToArrayBuffer(buf) {
+  if (!buf) return null;
+  if (buf instanceof ArrayBuffer) return buf;
+  if (ArrayBuffer.isView(buf)) return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  if (typeof buf === 'object' && buf.byteLength !== undefined && buf.buffer) return buf.buffer;
+  if (typeof buf === 'object') {
+    try { return new Uint8Array(Object.values(buf)).buffer; } catch(e) { return null; }
+  }
+  return null;
 }
 
-// ===== تشغيل الصوت القادم (أستاذ أو تلميذ) =====
-async function playAudioFromSource(sourceId, data) {
-  ensureAudioContext();
-  if (!audioContext) return;
-  if (!audioQueues.has(sourceId)) {
-    audioQueues.set(sourceId, { queue: [], playing: false });
+function playAudioFromSource(sourceId, data) {
+  if (!playbackQueues.has(sourceId)) {
+    playbackQueues.set(sourceId, { queue: [], playing: false });
   }
-  const q = audioQueues.get(sourceId);
+  const q = playbackQueues.get(sourceId);
   q.queue.push(data);
-  if (!q.playing) processAudioQueue(sourceId);
+  if (!q.playing) processPlaybackQueue(sourceId);
 }
 
-async function processAudioQueue(sourceId) {
-  const q = audioQueues.get(sourceId);
+function processPlaybackQueue(sourceId) {
+  const q = playbackQueues.get(sourceId);
   if (!q || q.queue.length === 0) {
     if (q) q.playing = false;
     return;
   }
   q.playing = true;
   const data = q.queue.shift();
+  const ab = bufferToArrayBuffer(data.buffer);
+  if (!ab) { processPlaybackQueue(sourceId); return; }
+  let url;
   try {
-    let arrayBuffer;
-    if (data.buffer instanceof ArrayBuffer) {
-      arrayBuffer = data.buffer.slice(0);
-    } else if (data.buffer && data.buffer.byteLength !== undefined) {
-      // Blob أو Uint8Array
-      arrayBuffer = data.buffer.buffer ? data.buffer.buffer.slice(0) : new Uint8Array(data.buffer).buffer;
-    } else if (data.buffer && typeof data.buffer === 'object') {
-      arrayBuffer = new Uint8Array(Object.values(data.buffer)).buffer;
-    } else {
-      processAudioQueue(sourceId);
-      return;
-    }
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
-    source.onended = () => processAudioQueue(sourceId);
-    source.start();
+    const blob = new Blob([ab], { type: data.mimeType || 'audio/webm' });
+    url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    audio.src = url;
+    audio.preload = 'auto';
+    const cleanup = () => { try { URL.revokeObjectURL(url); } catch(e) {} processPlaybackQueue(sourceId); };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    audio.play().catch(err => {
+      // إذا المتصفح يحتاج user gesture
+      console.warn('audio.play blocked:', err);
+      cleanup();
+    });
   } catch(e) {
-    processAudioQueue(sourceId);
+    if (url) try { URL.revokeObjectURL(url); } catch(_) {}
+    processPlaybackQueue(sourceId);
   }
 }
 
-// ===== Chat (مفتوح للجميع) =====
+// ===== رفع اليد (التلميذ) =====
+function toggleRaiseHand() {
+  if (ROLE !== 'student') return;
+  unlockAudio();
+  handRaised = !handRaised;
+  raiseHandBtn.classList.toggle('raised', handRaised);
+  socket.emit('raise_hand', { raised: handRaised });
+  showToast(handRaised ? '✋ رفعت يدك — انتظر الأستاذ' : '✋ خفضت يدك');
+}
+
+// ===== Chat =====
 function sendChat() {
+  if (myMuted) { showToast('🔇 الأستاذ كتم رسائلك'); return; }
+  if (chatLocked && ROLE !== 'teacher') { showToast('🔒 الشات مقفول'); return; }
   const text = chatBox.value.trim();
   if (!text) return;
   socket.emit('chat', { text });
@@ -561,6 +613,22 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+function toggleChatLock() {
+  if (ROLE !== 'teacher') return;
+  chatLocked = !chatLocked;
+  socket.emit('chat_lock', { locked: chatLocked });
+  updateLockBtn();
+}
+function updateLockBtn() {
+  if (!lockChatBtn) return;
+  lockChatBtn.textContent = chatLocked ? '🔒 مقفول' : '🔓 مفتوح';
+  lockChatBtn.classList.toggle('locked', chatLocked);
+  if (ROLE !== 'teacher') {
+    chatBox.disabled = chatLocked || myMuted;
+    chatBox.placeholder = chatLocked ? '🔒 الشات مقفول' : (myMuted ? '🔇 الأستاذ كتم رسائلك' : 'اكتب رسالة...');
+  }
+}
+
 // ===== التلاميذ =====
 function updateStudentsList(list) {
   if (!list || !list.length) {
@@ -571,19 +639,22 @@ function updateStudentsList(list) {
     const micIcon = s.micActive ? '<span class="speaking">🎙️</span>' : (s.micGranted ? '<span class="mic-on">🎙️</span>' : '');
     const handIcon = s.handRaised ? '✋ ' : '';
     if (ROLE === 'teacher') {
-      const micBtn = s.micGranted
+      const micCtrl = s.micGranted
         ? `<button class="revoke" onclick="revokeMic('${s.id}')" title="إلغاء إذن المايك">🚫🎙️</button>`
         : '';
-      return `<div class="student-item">
+      const muteBtn = `<button onclick="muteStudent('${s.id}', ${!s.muted})" title="${s.muted ? 'فك الكتم' : 'كتم'}">${s.muted ? '🔊' : '🔇'}</button>`;
+      return `<div class="student-item ${s.muted ? 'muted' : ''}">
         <span>${handIcon}🟢 ${escapeHtml(s.name)} ${micIcon}</span>
-        ${micBtn}
+        ${micCtrl}
+        ${muteBtn}
         <button class="kick" onclick="kickStudent('${s.id}')" title="طرد">🚫</button>
       </div>`;
     }
-    return `<div class="student-item"><span>${handIcon}🟢 ${escapeHtml(s.name)} ${micIcon}</span></div>`;
+    return `<div class="student-item ${s.muted ? 'muted' : ''}"><span>${handIcon}🟢 ${escapeHtml(s.name)} ${micIcon}</span></div>`;
   }).join('');
 }
 function kickStudent(id) { if (confirm('طرد هذا التلميذ؟')) socket.emit('kick_student', { id }); }
+function muteStudent(id, muted) { socket.emit('mute_student', { id, muted }); }
 function revokeMic(id) { socket.emit('revoke_mic', { id }); }
 
 // ===== Pending =====
@@ -636,6 +707,7 @@ function lowerHand(id) {
 
 // ===== Reactions =====
 function sendReaction(emoji) {
+  if (myMuted) return;
   socket.emit('student_react', { emoji });
   showFloatingReaction(emoji, window.innerWidth / 2, window.innerHeight - 100);
 }
@@ -677,7 +749,7 @@ function setupSocketEvents() {
   socket.on('approved', () => {
     document.getElementById('waitingScreen').style.display = 'none';
     setupRole();
-    ensureAudioContext();
+    unlockAudio();
     showToast('✅ تم قبولك!');
   });
   socket.on('rejected', () => {
@@ -693,6 +765,8 @@ function setupSocketEvents() {
     state.chatMessages?.forEach(m => addChatMsg(m));
     updateStudentsList(state.students);
     if (ROLE === 'teacher') updateRaisedHands(state.raisedHands || []);
+    chatLocked = !!state.chatLocked;
+    updateLockBtn();
     if (state.roomId) {
       ROOM_ID = state.roomId;
       document.getElementById('roomBadge').textContent = `🏫 ${ROOM_ID}`;
@@ -721,15 +795,15 @@ function setupSocketEvents() {
   socket.on('mic_status', d => {
     micIndicator.style.display = d.on ? 'block' : 'none';
     if (d.on) {
-      ensureAudioContext();
+      unlockAudio();
       if (ROLE === 'student') showToast('🎙️ الأستاذ يتكلم');
     } else {
-      const q = audioQueues.get('teacher');
+      const q = playbackQueues.get('teacher');
       if (q) { q.queue = []; q.playing = false; }
     }
   });
-  socket.on('audio_chunk', async d => {
-    if (ROLE === 'student') await playAudioFromSource('teacher', d);
+  socket.on('audio_chunk', d => {
+    if (ROLE === 'student') playAudioFromSource('teacher', d);
   });
 
   // ===== صوت التلميذ =====
@@ -744,33 +818,49 @@ function setupSocketEvents() {
     micGranted = false;
     studentMicBtn.classList.remove('granted');
     studentMicBtn.classList.remove('on');
-    if (studentMicOn) {
-      stopStudentAudioStream();
-      studentMicOn = false;
+    studentMicBtn.textContent = '🎙️';
+    if (studentRecording) {
+      studentRecording = false;
+      try { if (studentRecorder && studentRecorder.state !== 'inactive') studentRecorder.stop(); } catch(e) {}
+      studentRecorder = null;
+      studentLocalStream?.getTracks().forEach(t => t.stop());
+      studentLocalStream = null;
     }
     showToast('🚫 الأستاذ ألغى إذن المايك');
   });
   socket.on('student_mic_status', d => {
     if (d.on) {
       activeSpeakers.set(d.id, d.name);
-      ensureAudioContext();
+      unlockAudio();
       if (ROLE === 'teacher') showToast(`🎙️ ${d.name} يتكلم`);
     } else {
       activeSpeakers.delete(d.id);
-      const q = audioQueues.get('student_' + d.id);
+      const q = playbackQueues.get('student_' + d.id);
       if (q) { q.queue = []; q.playing = false; }
     }
     refreshSpeakingBanner();
   });
-  socket.on('student_audio_chunk', async d => {
-    // مايجيش للمرسل أصلاً (socket.to)
-    await playAudioFromSource('student_' + d.id, d);
+  socket.on('student_audio_chunk', d => {
+    playAudioFromSource('student_' + d.id, d);
   });
 
   // ===== شات =====
   socket.on('chat',       m => addChatMsg(m));
   socket.on('chat_clear', () => { chatMessagesEl.innerHTML = ''; });
   socket.on('delete_msg', d => removeMsgEl(d.id));
+  socket.on('chat_lock',  d => {
+    chatLocked = !!d.locked;
+    updateLockBtn();
+    showToast(d.locked ? '🔒 الشات مقفول' : '🔓 الشات مفتوح');
+  });
+  socket.on('chat_blocked', d => {
+    showToast(d.reason === 'muted' ? '🔇 الأستاذ كتم رسائلك' : '🔒 الشات مقفول');
+  });
+  socket.on('you_muted', d => {
+    myMuted = !!d.muted;
+    updateLockBtn();
+    showToast(myMuted ? '🔇 تم كتمك' : '🔊 تم فتح الكتم');
+  });
 
   // ===== التلاميذ =====
   socket.on('students_list', list => updateStudentsList(list));
