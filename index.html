@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>سبورة تعليمية</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin:0; padding:0; box-sizing:border-box; }
 :root { --toolbar:#16213e; --green:#00b894; --red:#e17055; --yellow:#fdcb6e; --white:#f5f5f5; --panel:#1e2a45; --dark:#1a1a2e; --purple:#a29bfe; }
 html,body { width:100%; height:100%; overflow:hidden; background:var(--dark); font-family:'Segoe UI',Tahoma,sans-serif; touch-action:none; }
 #toolbar { position:fixed; top:0; left:0; right:0; height:52px; background:var(--toolbar); display:flex; align-items:center; gap:5px; padding:0 10px; z-index:100; box-shadow:0 2px 10px rgba(0,0,0,0.4); overflow-x:auto; transition:height 0.25s,opacity 0.25s; }
@@ -16,7 +16,7 @@ html,body { width:100%; height:100%; overflow:hidden; background:var(--dark); fo
 #toolbar button:hover,#toolbar label:hover { background:rgba(255,255,255,0.15); }
 #toolbar button.active { background:var(--green); color:#000; font-weight:bold; }
 #toolbar button.danger { background:rgba(225,112,85,0.2); color:var(--red); }
-#micBtn.on { background:var(--red) !important; color:white !important; }
+#toolbar button.on { background:var(--red) !important; color:white !important; }
 #colorPicker { width:30px; height:30px; border-radius:50%; border:2px solid rgba(255,255,255,0.3); cursor:pointer; padding:0; flex-shrink:0; }
 #sizeSlider { width:65px; accent-color:var(--green); flex-shrink:0; }
 #roleBadge { margin-right:auto; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:bold; flex-shrink:0; }
@@ -154,6 +154,8 @@ html,body { width:100%; height:100%; overflow:hidden; background:var(--dark); fo
 <label for="fileInput">📁 ملف</label>
 <input type="file" id="fileInput" style="display:none">
 <button id="micBtn" onclick="toggleMic()">🎙️ مايك</button>
+<button id="camBtn" onclick="toggleCamera()">📷 كاميرا</button>
+<button id="screenBtn" onclick="toggleScreen()">🖥️ شاشة</button>
 <span class="sep"></span>
 <button onclick="shareRoomLink()" style="background:rgba(162,155,254,0.2);color:#a29bfe">🔗 شارك</button>
 <button class="danger" onclick="clearBoard()">🗑️ مسح</button>
