@@ -76,7 +76,6 @@ io.on('connection', (socket) => {
   socket.on('approve_student', d => {
     if (socket.role !== 'teacher') return;
     const p = room.pendingStudents[d.id];
-    console.log('approve_student', d.id, 'found:', !!p);
     if (!p) { socket.emit('approve_failed', { id: d.id }); return; }
     delete room.pendingStudents[d.id];
     if (d.approved) {
@@ -125,15 +124,9 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('clear');
   });
 
-  // ===== الصوت — مايك الأستاذ =====
   socket.on('mic_status', d => { if (socket.role === 'teacher') socket.to(roomId).emit('mic_status', d); });
   socket.on('audio_chunk', d => { if (socket.role === 'teacher') socket.to(roomId).emit('audio_chunk', d); });
 
-  // ===== كاميرا + مشاركة الشاشة =====
-  socket.on('media_status', d => { if (socket.role === 'teacher') socket.to(roomId).emit('media_status', d); });
-  socket.on('media_frame', d => { if (socket.role === 'teacher') socket.to(roomId).emit('media_frame', d); });
-
-  // ===== مايك التلميذ (بعد إذن) =====
   socket.on('student_mic_status', d => {
     if (socket.role !== 'student' || !room.micGrants.has(socket.id)) return;
     if (d.on) room.activeMics.add(socket.id); else room.activeMics.delete(socket.id);
@@ -145,7 +138,6 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('student_audio_chunk', { ...d, id: socket.id, name: socket.userName });
   });
 
-  // ===== الشات =====
   socket.on('chat', d => {
     if (!d || typeof d.text !== 'string') return;
     if (socket.role === 'student') {
@@ -189,7 +181,6 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('student_react', { ...d, name: socket.userName });
   });
 
-  // ===== رفع اليد =====
   socket.on('raise_hand', d => {
     if (socket.role !== 'student') return;
     if (d.raised) room.raisedHands[socket.id] = socket.userName;
