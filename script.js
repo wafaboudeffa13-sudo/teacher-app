@@ -6,7 +6,6 @@ let toolbarVisible = true;
 const IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
 const LOGICAL_W = 1280, LOGICAL_H = 720;
 
-// فك قفل الصوت في iOS
 const SILENT_MP3 = 'data:audio/mp3;base64,SUQzBAAAAAABEVRYWFgAAAAtAAADY29tbWVudABCaWdTb3VuZEJhbmsuY29tIC8gTGFTb25vdGhlcXVlLm9yZwBURU5DAAAAHQAAA1N3aXRjaCBQbHVzIMKpIE5DSCBTb2Z0d2FyZQBUSVQyAAAABgAAAzIyMzUAVFNTRQAAAA8AAANMYXZmNTcuODMuMTAwAAAAAAAAAAAAAAD/80DEAAAAA0gAAAAATEFNRTMuMTAwVVVVVVVVVVVVVUxBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/zQsQbAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/zQMSkAAADSAAAAABVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
 let audioUnlocked = false;
 function unlockAudio() {
@@ -14,7 +13,6 @@ function unlockAudio() {
   try { new Audio(SILENT_MP3).play().then(()=>{audioUnlocked=true;}).catch(()=>{}); } catch(e){}
 }
 
-// ===== Popups =====
 function showTeacherPopup() {
   document.getElementById('teacherPopup').style.display='flex';
   const i = document.getElementById('roomInput'); if (ROOM_ID) i.value=ROOM_ID;
@@ -58,14 +56,12 @@ function toggleToolbar() {
   setTimeout(resizeCanvas, 280);
 }
 
-// ===== Socket =====
 let socket;
 function initSocket() {
   socket = io({ query: { role: ROLE, name: USER_NAME, room: ROOM_ID } });
   setupSocketEvents();
 }
 
-// ===== Elements =====
 const canvas = document.getElementById('whiteboard');
 const ctx = canvas.getContext('2d');
 const textInput = document.getElementById('textInput');
@@ -86,7 +82,6 @@ const handsList = document.getElementById('handsList');
 const raiseHandBtn = document.getElementById('raiseHandBtn');
 const studentMicBtn = document.getElementById('studentMicBtn');
 
-// ===== State =====
 let tool='pen', drawing=false, lastX=0, lastY=0;
 let penColor='#000000', penSize=3;
 let textPos={x:0,y:0};
@@ -100,7 +95,6 @@ let teacherRecording=false, studentRecording=false;
 let teacherRecorder=null, studentRecorder=null;
 const blobUrls = new Map();
 
-// ===== Role / Panel =====
 function setupRole() {
   const badge = document.getElementById('roleBadge');
   document.getElementById('roomBadge').textContent = `🏫 ${ROOM_ID}`;
@@ -123,7 +117,6 @@ function applyPanelState() {
 }
 function togglePanel() { panelOpen=!panelOpen; applyPanelState(); setTimeout(resizeCanvas, 280); }
 
-// ===== Canvas =====
 function resizeCanvas() {
   let imgData=null;
   try { imgData=ctx.getImageData(0,0,canvas.width,canvas.height); } catch(e){}
@@ -243,7 +236,6 @@ function drawText(d) {
   ctx.fillStyle=d.color||'#000'; ctx.fillText(d.text, d.x, d.y);
 }
 
-// ===== Files (blob URLs) =====
 function dataUrlToBlobUrl(dataUrl, mime) {
   try {
     const arr=dataUrl.split(','); const m=arr[0].match(/:(.*?);/);
@@ -315,7 +307,6 @@ function clearBoard() {
   socket.emit('clear'); showToast('🗑️ تم المسح');
 }
 
-// ===== AUDIO clips =====
 function getMime() {
   if (typeof MediaRecorder==='undefined') return '';
   const types=['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4;codecs=mp4a.40.2','audio/mp4'];
@@ -405,7 +396,6 @@ function recordStudentClip() {
   try { rec.start(); setTimeout(()=>{ try{if(rec.state==='recording')rec.stop();}catch(e){} }, 1000); } catch(e){}
 }
 
-// ===== Playback =====
 const playQueues = new Map();
 function playAudio(sourceId, data) {
   if (!playQueues.has(sourceId)) playQueues.set(sourceId, { items:[], playing:false });
@@ -431,68 +421,6 @@ function playNext(sourceId) {
   audio.play().catch(()=>cleanup());
 }
 
-// ===== Camera + Screen Share =====
-let mediaActive=false, mediaInterval=null, mediaVideo=null, mediaCaptureCanvas=null, mediaOverlayImg=null;
-
-async function toggleCamera() {
-  if (ROLE!=='teacher') return;
-  if (mediaActive) { stopMedia(); return; }
-  try {
-    const stream=await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment', width:{ideal:720} }, audio:false });
-    startMediaCapture(stream, 640, 480, 0.5, 250, 'cam');
-  } catch(e) { console.error(e); showToast('❌ تعذر فتح الكاميرا'); }
-}
-async function toggleScreen() {
-  if (ROLE!=='teacher') return;
-  if (mediaActive) { stopMedia(); return; }
-  if (!navigator.mediaDevices.getDisplayMedia) {
-    showToast('❌ مشاركة الشاشة ما تخدمش في التليفون — استعمل الكاميرا');
-    return;
-  }
-  try {
-    const stream=await navigator.mediaDevices.getDisplayMedia({ video:true, audio:false });
-    stream.getVideoTracks()[0].onended=stopMedia;
-    startMediaCapture(stream, 1280, 720, 0.6, 400, 'screen');
-  } catch(e) { console.error(e); showToast('❌ تعذرت المشاركة'); }
-}
-function startMediaCapture(stream, w, h, quality, ms, mode) {
-  mediaActive=true;
-  mediaVideo=document.createElement('video');
-  mediaVideo.srcObject=stream; mediaVideo.muted=true; mediaVideo.playsInline=true;
-  mediaVideo.play().catch(()=>{});
-  mediaCaptureCanvas=document.createElement('canvas');
-  mediaCaptureCanvas.width=w; mediaCaptureCanvas.height=h;
-  const cctx=mediaCaptureCanvas.getContext('2d');
-  const btn=document.getElementById(mode==='cam'?'camBtn':'screenBtn');
-  if (btn) { btn.textContent='🔴 أوقف'; btn.classList.add('on'); }
-  socket.emit('media_status', { on:true, mode });
-  showToast(mode==='cam'?'📷 الكاميرا تخدم':'🖥️ المشاركة بدأت');
-  mediaInterval=setInterval(()=>{
-    if (!mediaActive || !mediaVideo || mediaVideo.readyState<2) return;
-    try {
-      const vw=mediaVideo.videoWidth||w, vh=mediaVideo.videoHeight||h;
-      const r=Math.min(w/vw, h/vh);
-      const dw=vw*r, dh=vh*r;
-      cctx.fillStyle='#000'; cctx.fillRect(0,0,w,h);
-      cctx.drawImage(mediaVideo, (w-dw)/2, (h-dh)/2, dw, dh);
-      socket.emit('media_frame', { data:mediaCaptureCanvas.toDataURL('image/jpeg', quality) });
-    } catch(e){}
-  }, ms);
-}
-function stopMedia() {
-  mediaActive=false;
-  if (mediaInterval) clearInterval(mediaInterval); mediaInterval=null;
-  if (mediaVideo) { try{mediaVideo.srcObject?.getTracks().forEach(t=>t.stop());}catch(e){} mediaVideo=null; }
-  mediaCaptureCanvas=null;
-  ['camBtn','screenBtn'].forEach(id=>{
-    const b=document.getElementById(id);
-    if (b) { b.textContent=id==='camBtn'?'📷 كاميرا':'🖥️ شاشة'; b.classList.remove('on'); }
-  });
-  if (socket?.connected) socket.emit('media_status', { on:false });
-  showToast('🔇 وقفت المشاركة');
-}
-
-// ===== Hand raise =====
 function toggleRaiseHand() {
   if (ROLE!=='student') return;
   unlockAudio();
@@ -502,7 +430,6 @@ function toggleRaiseHand() {
   showToast(handRaised?'✋ رفعت يدك':'✋ خفضت يدك');
 }
 
-// ===== Chat =====
 function sendChat() {
   if (myMuted) { showToast('🔇 الأستاذ كتم رسائلك'); return; }
   if (chatLocked && ROLE!=='teacher') { showToast('🔒 الشات مقفول'); return; }
@@ -538,7 +465,6 @@ function updateLockBtn() {
   }
 }
 
-// ===== Lists =====
 function updateStudentsList(list) {
   if (!list?.length) { studentsList.innerHTML='<span style="color:rgba(255,255,255,0.3);font-size:10px">لا يوجد</span>'; return; }
   studentsList.innerHTML=list.map(s=>{
@@ -602,13 +528,11 @@ function showToast(msg) {
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>toast.classList.remove('show'), 2500);
 }
 
-// ===== Socket Events =====
 function setupSocketEvents() {
   socket.on('connect', () => { if (ROLE==='teacher') showToast('🟢 متصل'); });
   socket.on('disconnect', () => showToast('🔴 انقطع'));
   socket.on('waiting_approval', () => document.getElementById('waitingScreen').style.display='flex');
   socket.on('approved', () => {
-    console.log('🎉 approved received');
     document.getElementById('waitingScreen').style.display='none';
     setupRole(); unlockAudio(); showToast('✅ تم قبولك!');
   });
@@ -672,21 +596,6 @@ function setupSocketEvents() {
     if (!d.on) { const q=playQueues.get('s_'+d.id); if (q) { q.items=[]; q.playing=false; } }
   });
   socket.on('student_audio_chunk', d => playAudio('s_'+d.id, d));
-  socket.on('media_status', d => {
-    if (ROLE==='teacher') return;
-    if (d.on) {
-      if (!mediaOverlayImg) {
-        mediaOverlayImg=document.createElement('img');
-        mediaOverlayImg.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:30';
-        document.getElementById('canvas-wrapper').appendChild(mediaOverlayImg);
-      }
-      showToast(d.mode==='cam'?'📷 الأستاذ يصور':'🖥️ الأستاذ يشارك الشاشة');
-    } else {
-      mediaOverlayImg?.remove(); mediaOverlayImg=null;
-      showToast('🔇 وقف المشاركة');
-    }
-  });
-  socket.on('media_frame', d => { if (ROLE==='student' && mediaOverlayImg) mediaOverlayImg.src=d.data; });
   socket.on('chat', m => addChatMsg(m));
   socket.on('chat_clear', () => chatMessagesEl.innerHTML='');
   socket.on('delete_msg', d => removeMsgEl(d.id));
@@ -705,7 +614,6 @@ function setupSocketEvents() {
   socket.on('kicked', () => document.getElementById('kickedScreen').style.display='flex');
 }
 
-// ===== Init =====
 applyPanelState();
 resizeCanvas();
 if (ROLE==='student') showNamePopup(); else showTeacherPopup();
